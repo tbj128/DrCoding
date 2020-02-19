@@ -1,2 +1,2 @@
-# DrCoding
-CS224n Final Project
+## DrCoding: Improving ICD-9 Diagnosis with NLP
+
