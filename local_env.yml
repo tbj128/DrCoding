@@ -12,3 +12,5 @@ dependencies:
   - pytorch
   - nltk
   - torchvision
+  - bcolz
+  - scikit-learn
