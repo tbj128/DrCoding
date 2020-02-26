@@ -20,7 +20,7 @@ import nltk
 nltk.download('punkt')
 
 
-def read_source_text(file_path, target_length, pad_token):
+def read_source_text(file_path, target_length=1000, pad_token='<pad>'):
     """
     Read the input discharge summaries.
     Take the first target_length number of words or pad with pad_token if the summary is less than the target_length
@@ -29,15 +29,21 @@ def read_source_text(file_path, target_length, pad_token):
     @param pad_token (str): the padding token
     """
     data = []
+    source_lengths = []
     with open(file_path) as f:
         for line in f:
-            sent = nltk.word_tokenize(line)
+            # sent = nltk.word_tokenize(line)
+            sent = line.split(" ")
+            length = len(sent)
             if len(sent) > target_length:
                 sent = sent[:target_length]
+                length = target_length
             while len(sent) < target_length:
                 sent.append(pad_token)
+                length += 1
             data.append(sent)
-    return data
+            source_lengths.append(length)
+    return data, source_lengths
 
 
 def read_icd_codes(file_path):
@@ -45,24 +51,15 @@ def read_icd_codes(file_path):
     Read the ICD codes into a one-hot like vector
     @param file_path (str): path to file containing ICD codes
     """
-    icd_to_pos = {}
-    pos_to_icd = {}
-    pos = 0
+    icds = []
     with open(file_path) as f:
         for line in f:
+            line = line.strip()
+            out = []
             for icd in line.split(","):
-                if icd not in icd_to_pos:
-                    icd_to_pos[icd] = pos
-                    pos_to_icd[pos] = icd
-                    pos += 1
-    data = []
-    with open(file_path) as f:
-        for line in f:
-            out_arr = [0] * len(icd_to_pos)
-            for icd in line.split(","):
-                out_arr[icd_to_pos[icd]] = 1
-            data.append(out_arr)
-    return data, pos_to_icd
+                out.append(icd.strip())
+            icds.append(out)
+    return icds
 
 
 def batch_iter(data, batch_size, shuffle=False):
@@ -84,6 +81,7 @@ def batch_iter(data, batch_size, shuffle=False):
 
         examples = sorted(examples, key=lambda e: len(e[0]), reverse=True)
         src_text = [e[0] for e in examples]
-        icd_codes = [e[1] for e in examples]
+        source_lengths = [e[1] for e in examples]
+        icd_codes = [e[2] for e in examples]
 
-        yield src_text, icd_codes
+        yield src_text, source_lengths, icd_codes

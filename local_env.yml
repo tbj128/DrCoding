@@ -1,6 +1,7 @@
 name: drcoding
 channels:
   - pytorch
+  - conda-forge
   - defaults
 dependencies:
   - pytorch
@@ -14,3 +15,4 @@ dependencies:
   - torchvision
   - bcolz
   - scikit-learn
+  - transformers

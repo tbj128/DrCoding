@@ -52,7 +52,7 @@ class Preprocess():
             for line in reader:
                 self.icd_to_desc[line[1]] = line[2]
                 condensed_icd = self._raw_icd_to_icd(line[1])
-                self.condensed_icd_to_desc[condensed_icd] = line[2]
+                self.condensed_icd_to_desc[condensed_icd] = line[3]
 
         print("> Finished getting the ICD map description. Found {}".format(len(self.icd_to_desc)))
 
@@ -86,7 +86,7 @@ class Preprocess():
 
         i = 0
         for key, value in sorted(icd_to_count.items(), key=lambda kv: kv[1], reverse=True):
-            if i >= 50:
+            if i >= top_k:
                 break
             print("   ICD {} has count {}".format(key, value))
             self.top_icd_codes.add(key)
@@ -165,7 +165,6 @@ class Preprocess():
             reader = csv.reader(f, delimiter=",")
             next(reader, None) # Skip headers
             with open(self.f_notes + ".txt", "w") as fw:
-                writer = csv.writer(fw, delimiter=",")
                 with open(self.f_icd + ".txt", "w") as icd_fw:
                     icd_writer = csv.writer(icd_fw, delimiter=",")
                     with open(self.f_icd + ".desc.txt", "w") as icd_desc_fw:
@@ -184,12 +183,12 @@ class Preprocess():
                             category = line[6]
                             text = line[10]
                             if category == "Discharge summary" and hadmid in self.hadmid_to_icds and len(self.hadmid_to_icds[hadmid]) > 0:
-                                text = text.lower().replace("\n", " ")
-                                text = hipaa_regex.sub("", text)
-                                text = regex.sub("", text)
-                                text = ' '.join([w for w in text.split() if w.isalpha() and len(w) > 1])
-                                text = re.sub(' +', ' ', text)
-                                writer.writerow([hadmid, text])
+                                text = text.lower().replace("\n", " ") # Convert to lower case and make one line
+                                text = re.sub('/', ' ', text) # Split slashes into two words
+                                text = hipaa_regex.sub("", text) # Remove name placeholders
+                                text = regex.sub("", text) # Remove punctuation, numbers, etc.
+                                text = ' '.join([w for w in text.split() if len(w) > 1]) # Remove single letters
+                                fw.write(text + "\n")
 
                                 icd_writer.writerow(self.hadmid_to_icds[hadmid])
                                 desc_row = []

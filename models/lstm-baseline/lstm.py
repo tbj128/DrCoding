@@ -4,6 +4,7 @@
 """
 DrCoding | LSTM baseline model for the MIMIC-III ICD-9 prediction task
 """
+import sys
 from typing import List
 
 import torch
@@ -12,7 +13,7 @@ import torch.nn.functional as f
 
 
 class DischargeLSTM(nn.Module):
-    def __init__(self, vocab, hidden_size, dropout_rate, num_output_classes, embed_size, pretrained_embeddings=None):
+    def __init__(self, vocab, hidden_size, dropout_rate, embed_size, pretrained_embeddings=None):
         """
 
         Bidrectional LSTM Multi-Label Classifier with Glove embeddings
@@ -28,20 +29,24 @@ class DischargeLSTM(nn.Module):
 
         self.pretrained_embeddings = pretrained_embeddings
         self.vocab = vocab
+        self.num_output_classes = len(self.vocab.icd)
+        self.hidden_size = hidden_size
+        self.dropout_rate = dropout_rate
+        self.embed_size = embed_size
 
         if pretrained_embeddings is not None:
-            weights_matrix = np.zeros((len(self.vocab()), pretrained_embeddings.embed_size))
+            weights_matrix = np.zeros((len(self.vocab.discharge), pretrained_embeddings.embed_size))
             self.embed_size = pretrained_embeddings.embed_size
-            for w in self.vocab():
+            for w in self.vocab.discharge:
                 weights_matrix[i] = glove[w]
-            self.embeddings = nn.Embedding(len(self.vocab()), embed_size, padding_idx=self.vocab.pad_token)
+            self.embeddings = nn.Embedding(len(self.vocab.discharge), embed_size, padding_idx=self.vocab.discharge.pad_token)
             self.embeddings.load_state_dict({'weight': weights_matrix})
             self.embeddings.weight.requires_grad = False
         else:
             self.embed_size = embed_size
-            self.embeddings = nn.Embedding(len(self.vocab), embed_size, padding_idx=self.vocab.pad_token)
+            self.embeddings = nn.Embedding(len(self.vocab.discharge), embed_size, padding_idx=self.vocab.discharge.pad_token)
         self.lstm = nn.LSTM(input_size=embed_size, hidden_size=hidden_size, bidirectional=True, bias=True)
-        self.linear = nn.Linear(embed_size * 2, num_output_classes, bias=False)
+        self.linear = nn.Linear(embed_size * 2, self.num_output_classes, bias=False)
         self.dropout = nn.Dropout(dropout_rate)
 
     def forward(self, discharge_padded, source_lengths):
@@ -74,13 +79,13 @@ class DischargeLSTM(nn.Module):
         return model
 
     def save(self, path: str):
-        """ Save the model to a file.
+        """
+        Save the model to a file.
         @param path (str): path to the model
         """
         print('save model parameters to [%s]' % path, file=sys.stderr)
-
         params = {
-            'args': dict(hidden_size=self.hidden_size, dropout_rate=self.dropout_rate, num_output_classes=self.num_output_classes, embed_size=self.embed_size, pretrained_embeddings=None),
+            'args': dict(hidden_size=self.hidden_size, dropout_rate=self.dropout_rate, embed_size=self.embed_size),
             'vocab': self.vocab,
             'state_dict': self.state_dict()
         }

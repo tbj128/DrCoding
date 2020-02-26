@@ -32,7 +32,7 @@ class Split(object):
                 for i, row in enumerate(arr):
                     if i >= self.size:
                         break
-                    f.write(row + "\n")
+                    f.write(row)
 
     def run(self):
         notes = []

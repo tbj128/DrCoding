@@ -9,11 +9,12 @@ Adapted from the `vocab.py` file in the CS224N assignments.
 
 
 Usage:
-    vocab.py --train-src=<file> --train-tgt=<file> [options] VOCAB_FILE
+    vocab.py --train-src=<file> --train-icd=<file> [options] VOCAB_FILE
 
 Options:
     -h --help                  Show this screen.
     --train-src=<file>         File of training discharge summaries
+    --train-icd=<file>         File of training ICD codes
     --size=<int>               vocab size [default: 50000]
     --freq-cutoff=<int>        frequency cutoff [default: 2]
 
@@ -25,6 +26,89 @@ from itertools import chain
 import json
 import torch
 from typing import List
+from utils import read_source_text, read_icd_codes
+
+
+class ICDVocab(object):
+    """
+
+    """
+
+    def __init__(self, icd2id=None):
+        """
+        Constructor for the vocabulary representation
+        @param word2id (dict): dictionary mapping words 2 indices
+        """
+        if icd2id:
+            self.icd2id = icd2id
+        else:
+            self.icd2id = dict()
+        self.id2icd = {v: k for k, v in self.icd2id.items()}
+
+    def __getitem__(self, id):
+        """
+        Retrieve word's index. Return the index for the unk
+        token if the word is out of vocabulary.
+        @param word (str): word to look up.
+        @returns index (int): index of word
+        """
+        return self.id2icd.get(id)
+
+    def __len__(self):
+        """ Compute number of words in VocabEntry.
+        @returns len (int): number of words in VocabEntry
+        """
+        return len(self.icd2id)
+
+    def add(self, word):
+        """ Add word to VocabEntry, if it is previously unseen.
+        @param word (str): word to add to VocabEntry
+        @return index (int): index that the word has been assigned
+        """
+        if word not in self.icd2id:
+            wid = self.icd2id[word] = len(self.icd2id)
+            self.id2icd[wid] = word
+            return wid
+        else:
+            return self.icd2id[word]
+
+    def to_one_hot(self, icds, device):
+        """
+
+        :param icds:
+        :return:
+        """
+        data = []
+        for icd_row in icds:
+            out_arr = [0] * len(self.icd2id)
+            for icd in icd_row:
+                if icd in self.icd2id:
+                    out_arr[self.icd2id[icd]] = 1
+                else:
+                    out_arr[self.unk_id] = 1
+            data.append(out_arr)
+        return torch.tensor(data, dtype=torch.float, device=device)
+
+    @staticmethod
+    def from_source(source_icds):
+        icd_vocab = ICDVocab()
+        for icds in source_icds:
+            for icd in icds:
+                icd_vocab.add(icd.strip())
+
+        print('number of ICDs: {}'.format(len(icd_vocab.icd2id)))
+        return icd_vocab
+
+    @staticmethod
+    def load_previous_vocab(file_path):
+        """
+        Load vocabulary from JSON dump.
+        @param file_path (str): file path to vocab file
+        @returns Vocab object loaded from JSON dump
+        """
+        entry = json.load(open(file_path, 'r'))
+        return ICDVocab(icd2id=entry["icd"])
+
 
 class DischargeVocab(object):
     """
@@ -136,7 +220,16 @@ class DischargeVocab(object):
         @param freq_cutoff (int): if word occurs n < freq_cutoff times, drop the word
         @returns vocab_entry (VocabEntry): VocabEntry instance produced from provided corpus
         """
-        word_freq = Counter(chain(*source_text))
+        word_freq = {}
+        for i, sentence in enumerate(source_text):
+            for word in sentence:
+                if word in word_freq:
+                    word_freq[word] += 1
+                else:
+                    word_freq[word] = 1
+
+            if i % 500 == 0:
+                print("   > Processed {} lines so far".format(i), end='\r', flush=True)
         valid_words = [w for w, v in word_freq.items() if v >= freq_cutoff]
         vocab_entry = DischargeVocab()
         print('number of word types: {}, number of word types w/ frequency >= {}: {}'
@@ -147,13 +240,6 @@ class DischargeVocab(object):
                 vocab_entry.add(word)
         return vocab_entry
 
-    def save(self, out_path):
-        """
-        Save Vocab to file as JSON dump.
-        @param file_path (str): file path to vocab file
-        """
-        json.dump(self.word2id, open(out_path, 'w'), indent=2)
-
     @staticmethod
     def load_previous_vocab(file_path):
         """
@@ -162,7 +248,25 @@ class DischargeVocab(object):
         @returns Vocab object loaded from JSON dump
         """
         entry = json.load(open(file_path, 'r'))
-        return DischargeVocab(word2id=entry)
+        return DischargeVocab(word2id=entry["discharge"])
+
+
+class Vocab(object):
+    """
+    """
+    def __init__(self, discharge, icd):
+        self.discharge = discharge
+        self.icd = icd
+
+    @staticmethod
+    def load(file_path):
+        """
+        Load vocabulary from JSON dump.
+        @param file_path (str): file path to vocab file
+        @returns Vocab object loaded from JSON dump
+        """
+        entry = json.load(open(file_path, 'r'))
+        return Vocab(DischargeVocab(word2id=entry["discharge"]), ICDVocab(icd2id=entry["icd"]))
 
 
 def main():
@@ -173,12 +277,23 @@ def main():
 
     print('read in source sentences: %s' % args['--train-src'])
 
-    src_sents = read_corpus(args['--train-src'], source='src')
+    src_sents, src_lengths = read_source_text(args['--train-src'])
 
-    vocab = Vocab.from_source_text(src_sents, int(args['--size']), int(args['--freq-cutoff']))
-    print('generated vocabulary, source %d words' % (len(vocab.src)))
+    print('generating vocabulary... ')
+    discharge_vocab = DischargeVocab.from_source_text(src_sents, int(args['--size']), int(args['--freq-cutoff']))
+    print('generated vocabulary, source %d words' % (len(discharge_vocab)))
 
-    vocab.save(args['VOCAB_FILE'])
+    src_icds = read_icd_codes(args['--train-icd'])
+    icd_vocab = ICDVocab.from_source(src_icds)
+    print('ICD vocab size is %d' % (len(icd_vocab)))
+
+    full_vocab = {
+        "discharge": discharge_vocab.word2id,
+        "icd": icd_vocab.icd2id
+    }
+
+    json.dump(full_vocab, open(args['VOCAB_FILE'], 'w'), indent=2)
+
     print('vocabulary saved to %s' % args['VOCAB_FILE'])
 
 if __name__ == '__main__':
