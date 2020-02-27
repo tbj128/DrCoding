@@ -2,6 +2,7 @@ name: drcoding
 channels:
   - pytorch
   - conda-forge
+  - fastai
   - defaults
 dependencies:
   - pytorch
@@ -16,3 +17,4 @@ dependencies:
   - bcolz
   - scikit-learn
   - transformers
+  - fastai
