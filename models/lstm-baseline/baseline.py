@@ -34,7 +34,7 @@ Options:
     --valid-niter=<int>                     perform validation after how many iterations [default: 100]
     --dropout=<float>                       dropout [default: 0.3]
     --max-decoding-time-step=<int>          maximum number of decoding time steps [default: 70]
-    --threshold=<float>                     probability threshold of accepting an ICD code [default: 0.3]
+    --threshold=<float>                     probability threshold of accepting an ICD code [default: 0.2]
     --verbose                               show additional logging
 """
 import math
@@ -117,7 +117,7 @@ def evaluate_model_with_dev(model, dev_data, threshold, device, batch_size=32):
             likelihoods = F.softmax(model_out, dim=1)
             for row in range(likelihoods.shape[0]):
                 icd_preds = [1 if likelihoods[row,col].item() >= threshold else 0 for col in range(likelihoods.shape[1])]
-                f1 = f1_score(actual_icds[row], icd_preds, average='macro')
+                f1 = f1_score(actual_icds[row].cpu(), icd_preds, average='macro')
                 total_f1 += f1
 
     avg_f1 = total_f1 / len(dev_data)
