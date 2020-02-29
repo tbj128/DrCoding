@@ -77,6 +77,7 @@ def evaluate_scores(references: List[str], predicted: List[str]):
 def predict_output(args, model, dev_data, device, batch_size=32):
     preds = []
     icds = []
+    completed = 0
     with torch.no_grad():
         for src_text, src_lengths, actual_icds in batch_iter(dev_data, batch_size):
             batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
@@ -93,6 +94,9 @@ def predict_output(args, model, dev_data, device, batch_size=32):
                 preds.append(top_output_icd)
             for actual_icd in actual_icds:
                 icds.append(actual_icd)
+
+            completed += len(src_text)
+            print("   > Completed {}/{}".format(completed, len(dev_data)), end='\r', flush=True)
     return preds, icds
 
 def evaluate_model_with_dev(args, model, dev_data, device, batch_size=32):

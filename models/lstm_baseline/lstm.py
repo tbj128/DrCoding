@@ -76,7 +76,7 @@ class DischargeLSTM(nn.Module):
         model = DischargeLSTM(vocab=params['vocab'], **args)
         model.load_state_dict(params['state_dict'])
 
-        print("Weight before saving...")
+        print("Weight after loading...")
         print(model.linear.weight)
 
         return model
