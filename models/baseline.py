@@ -46,7 +46,7 @@ from docopt import docopt
 import numpy as np
 from typing import List, Tuple, Dict, Set, Union
 from tqdm import tqdm
-from lstm import DischargeLSTM
+from lstm_baseline.lstm import DischargeLSTM
 from utils import batch_iter, read_source_text, read_icd_codes
 
 import torch
