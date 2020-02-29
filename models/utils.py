@@ -20,7 +20,7 @@ import nltk
 nltk.download('punkt')
 
 
-def read_source_text(file_path, target_length=1000, pad_token='<pad>'):
+def read_source_text(file_path, target_length=1000, pad_token='<pad>', use_cls=False):
     """
     Read the input discharge summaries.
     Take the first target_length number of words or pad with pad_token if the summary is less than the target_length
@@ -34,6 +34,8 @@ def read_source_text(file_path, target_length=1000, pad_token='<pad>'):
         for line in f:
             # sent = nltk.word_tokenize(line)
             sent = line.split(" ")
+            if use_cls:
+                sent = ['<cls>'] + sent
             length = len(sent)
             if len(sent) > target_length:
                 sent = sent[:target_length]

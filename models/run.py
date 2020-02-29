@@ -11,6 +11,7 @@ Usage:
 Options:
     -h --help                               show this screen.
     --cuda                                  use GPU
+    --model=<str>                           the type of model to train [default: baseline]
     --train-src=<file>                      train source file
     --train-icd=<file>                      train ICD codes file
     --dev-src=<file>                        dev source file
@@ -47,6 +48,7 @@ import numpy as np
 from typing import List, Tuple, Dict, Set, Union
 from tqdm import tqdm
 from lstm_baseline.lstm import DischargeLSTM
+from reformer.reformer_classifier import ReformerClassifier
 from utils import batch_iter, read_source_text, read_icd_codes
 
 import torch
@@ -72,8 +74,28 @@ def evaluate_scores(references: List[str], predicted: List[str]):
 
     return precision, recall, f1, accuracy
 
+def predict_output(args, model, dev_data, device, batch_size=32):
+    preds = []
+    icds = []
+    with torch.no_grad():
+        for src_text, src_lengths, actual_icds in batch_iter(dev_data, batch_size):
+            batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
+            batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)
 
-def evaluate_model_with_dev(model, dev_data, device, batch_size=32):
+            if args['--model'] == 'baseline':
+                model_out = model(batch_src_text_tensor, batch_src_lengths)
+            else:
+                model_out = model(batch_src_text_tensor)
+            top_prediction_indices = torch.argmax(F.softmax(model_out, dim=1), dim=1)  # bs x 1
+
+            for ind in top_prediction_indices.cpu().tolist():
+                top_output_icd = model.vocab.icd.get_icd(ind)
+                preds.append(top_output_icd)
+            for actual_icd in actual_icds:
+                icds.append(actual_icd)
+    return preds, icds
+
+def evaluate_model_with_dev(args, model, dev_data, device, batch_size=32):
     """
 
     """
@@ -81,22 +103,7 @@ def evaluate_model_with_dev(model, dev_data, device, batch_size=32):
     model.eval()
 
     # no_grad() signals backend to throw away all gradients
-    preds = []
-    icds = []
-    with torch.no_grad():
-        for src_text, src_lengths, actual_icds in batch_iter(dev_data, batch_size):
-
-            batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
-            batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)
-
-            model_out = model(batch_src_text_tensor, batch_src_lengths)
-            top_prediction_indices = torch.argmax(F.softmax(model_out, dim=1), dim=1) # bs x 1
-
-            for ind in top_prediction_indices.cpu().tolist():
-                top_output_icd = model.vocab.icd.get_icd(ind)
-                preds.append(top_output_icd)
-            for actual_icd in actual_icds:
-                icds.append(actual_icd)
+    preds, icds = predict_output(args, model, dev_data, device, batch_size)
 
     f1 = f1_score(preds, icds, average='micro')
 
@@ -111,12 +118,14 @@ def train(args: Dict):
     Train the baseline LSTM model
     @param args (Dict): args from cmd line
     """
-    vocab = Vocab.load(args['--vocab'])
 
-    train_source_text, train_source_lengths = read_source_text(args['--train-src'], target_length=int(args['--target-length']), pad_token=vocab.discharge.pad_token)
+    vocab = Vocab.load(args['--vocab'])
+    use_cls = args['--model'] != "baseline"
+
+    train_source_text, train_source_lengths = read_source_text(args['--train-src'], target_length=int(args['--target-length']), pad_token=vocab.discharge.pad_token, use_cls=use_cls)
     train_icd_codes = read_icd_codes(args['--train-icd'])
 
-    dev_source_text, dev_source_lengths = read_source_text(args['--dev-src'], target_length=int(args['--target-length']), pad_token=vocab.discharge.pad_token)
+    dev_source_text, dev_source_lengths = read_source_text(args['--dev-src'], target_length=int(args['--target-length']), pad_token=vocab.discharge.pad_token, use_cls=use_cls)
     dev_icd_codes = read_icd_codes(args['--dev-icd'])
 
     train_data = list(zip(train_source_text, train_source_lengths, train_icd_codes))
@@ -129,10 +138,32 @@ def train(args: Dict):
     log_every = int(args['--log-every'])
     model_save_path = args['--save-to']
 
-    model = DischargeLSTM(vocab=vocab,
-                          embed_size=int(args['--word-embed-size']),
-                          hidden_size=int(args['--hidden-size']),
-                          dropout_rate=float(args['--dropout']))
+    model_type = args['--model']
+    if model_type == "baseline":
+        model = DischargeLSTM(vocab=vocab,
+                              embed_size=int(args['--word-embed-size']),
+                              hidden_size=int(args['--hidden-size']),
+                              dropout_rate=float(args['--dropout']))
+    elif model_type == "reformer":
+        model = ReformerClassifier(
+            vocab=vocab,
+            dim=int(args['--word-embed-size']),
+            depth=6,
+            max_seq_len=int(args['--target-length']),
+            num_heads=8,
+            bucket_size=64,
+            n_hashes=4,
+            ff_chunks=10,
+            lsh_dropout=0.1,
+            weight_tie=True,
+            causal=True,
+            use_full_attn=False # set this to true for comparison with full attention
+        )
+        if args['--cuda']:
+            model.cuda()
+    else:
+        raise NotImplementedError("Invalid model type")
+
     model.train()
 
     uniform_init = float(args['--uniform-init'])
@@ -174,8 +205,10 @@ def train(args: Dict):
             if args['--verbose']:
                 print("  > epoch {} iter {} batch_src_text {}".format(epoch, train_iter, batch_src_text_tensor.shape))
 
-
-            model_output = model(batch_src_text_tensor, batch_src_lengths)
+            if args['--model'] == 'baseline':
+                model_output = model(batch_src_text_tensor, batch_src_lengths)
+            else:
+                model_output = model(batch_src_text_tensor)
             example_losses = lossFunc(model_output, batch_icd_codes)
             batch_loss = example_losses.sum()
             loss = batch_loss / batch_size
@@ -216,7 +249,7 @@ def train(args: Dict):
             if train_iter % valid_niter == 0 or epoch == int(args['--max-epoch']):
                 print('begin validation ...', file=sys.stderr)
 
-                dev_f1 = evaluate_model_with_dev(model, dev_data, device, batch_size=128)   # dev batch size can be a bit larger
+                dev_f1 = evaluate_model_with_dev(args, model, dev_data, device, batch_size=128)   # dev batch size can be a bit larger
                 valid_metric = dev_f1
 
                 print('validation: iter %d, dev. f1 %f' % (train_iter, dev_f1), file=sys.stderr)
@@ -268,7 +301,8 @@ def train(args: Dict):
 
 def predict_icd_codes(args: Dict[str, str]):
     print("load test source sentences from [{}]".format(args['TEST_SOURCE_FILE']), file=sys.stderr)
-    test_source_text, test_source_lengths = read_source_text(args['TEST_SOURCE_FILE'])
+    use_cls = args["--model"] != "baseline"
+    test_source_text, test_source_lengths = read_source_text(args['TEST_SOURCE_FILE'], use_cls=use_cls)
 
     if args['TEST_TARGET_FILE']:
         print("load test icd codes from [{}]".format(args['TEST_TARGET_FILE']), file=sys.stderr)
@@ -276,7 +310,7 @@ def predict_icd_codes(args: Dict[str, str]):
     else:
         test_icd_codes = None
 
-    test_data = list(zip(test_source_text, test_source_lengths))
+    test_data = list(zip(test_source_text, test_source_lengths, test_icd_codes))
 
     print("load model from {}".format(args['MODEL_PATH']), file=sys.stderr)
     model = DischargeLSTM.load(args['MODEL_PATH'])
@@ -290,27 +324,17 @@ def predict_icd_codes(args: Dict[str, str]):
     device = torch.device("cuda:0" if args['--cuda'] else "cpu")
     print('Using device: %s' % device, file=sys.stderr)
 
-    hypotheses = []
-    with torch.no_grad():
-        for single_src_text, single_source_lengths in tqdm(test_data, desc='Decoding', file=sys.stdout):
-            batch_src_text_tensor = model.vocab.discharge.to_input_tensor([single_src_text], device)
-            batch_src_lengths = torch.tensor([single_source_lengths], dtype=torch.long, device=device)
-
-            model_out = model(batch_src_text_tensor, batch_src_lengths) # batch_size=1 x num_output_classes
-            top_output_class = torch.argmax(F.softmax(model_out, dim=1), dim=1).squeeze().item()
-
-            top_output_icd = model.vocab.icd.get_icd(top_output_class)
-            hypotheses.append(top_output_icd)
+    preds, icds = predict_output(args, model, test_data, device, batch_size=128)
 
     if was_training: model.train(was_training)
 
     if test_icd_codes is not None:
-        precision, recall, f1, accuracy = evaluate_scores(test_icd_codes, hypotheses)
+        precision, recall, f1, accuracy = evaluate_scores(icds, preds)
         print('Precision {}, recall {}, f1 {}, accuracy: {}'.format(precision, recall, f1, accuracy), file=sys.stderr)
 
     with open(args['OUTPUT_FILE'], 'w') as f:
-        for hyps in hypotheses:
-            f.write(hyps + '\n')
+        for pred in preds:
+            f.write(pred + '\n')
 
 
 def main():

@@ -76,6 +76,9 @@ class DischargeLSTM(nn.Module):
         model = DischargeLSTM(vocab=params['vocab'], **args)
         model.load_state_dict(params['state_dict'])
 
+        print("Weight before saving...")
+        print(model.linear.weight)
+
         return model
 
     def save(self, path: str):
@@ -91,3 +94,6 @@ class DischargeLSTM(nn.Module):
         }
 
         torch.save(params, path)
+
+        print("Weight before saving...")
+        print(self.linear.weight)
