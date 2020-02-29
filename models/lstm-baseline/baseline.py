@@ -77,16 +77,16 @@ def evaluate_scores(references: List[List[str]], predicted: List[List[str]]):
         union = len(set(references[i] + predicted[i]))
         num_references = len(references[i])
         num_predicted = len(predicted[i])
-        precision = joint / num_references
+        precision = joint / num_references if num_references > 0 else 0
         total_precision += precision
 
-        recall = joint / num_predicted
+        recall = joint / num_predicted if num_predicted > 0 else 0
         total_recall += recall
 
-        f1 = 2 * joint / (num_predicted + num_references)
+        f1 = 2 * joint / (num_predicted + num_references) if (num_predicted + num_references) > 0 else 0
         total_f1 += f1
 
-        accuracy = joint / union
+        accuracy = joint / union if union > 0 else 0
         total_accuracy += accuracy
 
     precision = total_precision / len(references)
