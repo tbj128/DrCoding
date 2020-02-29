@@ -34,7 +34,6 @@ Options:
     --valid-niter=<int>                     perform validation after how many iterations [default: 100]
     --dropout=<float>                       dropout [default: 0.3]
     --max-decoding-time-step=<int>          maximum number of decoding time steps [default: 70]
-    --threshold=<float>                     probability threshold of accepting an ICD code [default: 0.2]
     --verbose                               show additional logging
 """
 import math
@@ -92,10 +91,12 @@ def evaluate_model_with_dev(model, dev_data, device, batch_size=32):
 
             model_out = model(batch_src_text_tensor, batch_src_lengths)
             top_prediction_indices = torch.argmax(F.softmax(model_out, dim=1), dim=1) # bs x 1
+
             for ind in top_prediction_indices.cpu().tolist():
-                preds.append(ind.item())
-            for actual_icd in actual_icds.cpu().tolist():
-                icds.append(actual_icd.item())
+                top_output_icd = model.vocab.icd.get_icd(ind)
+                preds.append(top_output_icd)
+            for actual_icd in actual_icds:
+                icds.append(actual_icd)
 
     f1 = f1_score(preds, icds, average='micro')
 
@@ -215,7 +216,7 @@ def train(args: Dict):
             if train_iter % valid_niter == 0 or epoch == int(args['--max-epoch']):
                 print('begin validation ...', file=sys.stderr)
 
-                dev_f1 = evaluate_model_with_dev(model, dev_data, float(args["--threshold"]), device, batch_size=128)   # dev batch size can be a bit larger
+                dev_f1 = evaluate_model_with_dev(model, dev_data, device, batch_size=128)   # dev batch size can be a bit larger
                 valid_metric = dev_f1
 
                 print('validation: iter %d, dev. f1 %f' % (train_iter, dev_f1), file=sys.stderr)
@@ -288,8 +289,6 @@ def predict_icd_codes(args: Dict[str, str]):
 
     device = torch.device("cuda:0" if args['--cuda'] else "cpu")
     print('Using device: %s' % device, file=sys.stderr)
-
-    threshold = float(args['--threshold'])
 
     hypotheses = []
     with torch.no_grad():
