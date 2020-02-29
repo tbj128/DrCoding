@@ -331,7 +331,7 @@ def predict_icd_codes(args: Dict[str, str]):
     if was_training: model.train(was_training)
 
     if test_icd_codes is not None:
-        test_icd_codes = model.vocab.icd.to_one_hot(test_icd_codes, device)
+        test_icd_codes = model.vocab.icd.to_one_hot(test_icd_codes, device).tolist()
         precision, recall, f1, accuracy = evaluate_scores(test_icd_codes, hypotheses)
         print('Precision {}, recall {}, f1 {}, accuracy: {}'.format(precision, recall, f1, accuracy), file=sys.stderr)
 
