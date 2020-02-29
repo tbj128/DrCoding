@@ -60,6 +60,9 @@ class ICDVocab(object):
         """
         return len(self.icd2id)
 
+    def get_icd(self, id):
+        return self.id2icd[id]
+
     def add(self, word):
         """ Add word to VocabEntry, if it is previously unseen.
         @param word (str): word to add to VocabEntry
@@ -82,10 +85,7 @@ class ICDVocab(object):
         for icd_row in icds:
             out_arr = [0] * len(self.icd2id)
             for icd in icd_row:
-                if icd in self.icd2id:
-                    out_arr[self.icd2id[icd]] = 1
-                else:
-                    out_arr[self.unk_id] = 1
+                out_arr[self.icd2id[icd]] = 1
             data.append(out_arr)
         return torch.tensor(data, dtype=torch.float, device=device)
 
@@ -126,8 +126,10 @@ class DischargeVocab(object):
             self.word2id = dict()
             self.word2id['<pad>'] = 0  # Pad Token
             self.word2id['<unk>'] = 1  # Unknown Token
-        self.unk_id = self.word2id['<unk>']
+            self.word2id['<cls>'] = 2  # Classification Token
         self.pad_token = self.word2id['<pad>']
+        self.unk_id = self.word2id['<unk>']
+        self.classification_token = self.word2id['<cls>']
         self.id2word = {v: k for k, v in self.word2id.items()}
 
     def __getitem__(self, word):

@@ -32,8 +32,8 @@ def read_source_text(file_path, target_length=1000, pad_token='<pad>'):
     source_lengths = []
     with open(file_path) as f:
         for line in f:
-            sent = nltk.word_tokenize(line)
-            # sent = line.split(" ")
+            # sent = nltk.word_tokenize(line)
+            sent = line.split(" ")
             length = len(sent)
             if len(sent) > target_length:
                 sent = sent[:target_length]

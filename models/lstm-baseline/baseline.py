@@ -55,49 +55,26 @@ import torch.nn as nn
 import torch.nn.utils
 import torch.nn.functional as F
 
-from nltk.tokenize.treebank import TreebankWordDetokenizer
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
 
 from vocab import Vocab
 
 
-def evaluate_scores(references: List[List[str]], predicted: List[List[str]]):
+def evaluate_scores(references: List[str], predicted: List[str]):
     """
     Given set of references and predicted ICD codes, return the precision, recall, f1, and accuracy statistics
     """
     assert len(references) == len(predicted)
 
-    total_precision = 0
-    total_recall = 0
-    total_f1 = 0
-    total_accuracy = 0
-
-    for i in range(len(references)):
-        joint = len(set(references[i]).intersection(set(predicted[i])))
-        union = len(set(references[i] + predicted[i]))
-        num_references = len(references[i])
-        num_predicted = len(predicted[i])
-        precision = joint / num_references if num_references > 0 else 0
-        total_precision += precision
-
-        recall = joint / num_predicted if num_predicted > 0 else 0
-        total_recall += recall
-
-        f1 = 2 * joint / (num_predicted + num_references) if (num_predicted + num_references) > 0 else 0
-        total_f1 += f1
-
-        accuracy = joint / union if union > 0 else 0
-        total_accuracy += accuracy
-
-    precision = total_precision / len(references)
-    recall = total_recall / len(references)
-    f1 = total_f1 / len(references)
-    accuracy = total_accuracy / len(references)
+    f1 = f1_score(references, predicted, average="micro")
+    precision = precision_score(references, predicted, average="micro")
+    recall = recall_score(references, predicted, average="micro")
+    accuracy = accuracy_score(references, predicted)
 
     return precision, recall, f1, accuracy
 
 
-def evaluate_model_with_dev(model, dev_data, threshold, device, batch_size=32):
+def evaluate_model_with_dev(model, dev_data, device, batch_size=32):
     """
 
     """
@@ -105,27 +82,27 @@ def evaluate_model_with_dev(model, dev_data, threshold, device, batch_size=32):
     model.eval()
 
     # no_grad() signals backend to throw away all gradients
-    total_f1 = 0
+    preds = []
+    icds = []
     with torch.no_grad():
         for src_text, src_lengths, actual_icds in batch_iter(dev_data, batch_size):
 
             batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
             batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)
-            actual_icds = model.vocab.icd.to_one_hot(actual_icds, device)
 
             model_out = model(batch_src_text_tensor, batch_src_lengths)
-            likelihoods = F.softmax(model_out, dim=1)
-            for row in range(likelihoods.shape[0]):
-                icd_preds = [1 if likelihoods[row,col].item() >= threshold else 0 for col in range(likelihoods.shape[1])]
-                f1 = f1_score(actual_icds[row].cpu(), icd_preds, average='macro')
-                total_f1 += f1
+            top_prediction_indices = torch.argmax(F.softmax(model_out, dim=1), dim=1) # bs x 1
+            for ind in top_prediction_indices.cpu().tolist():
+                preds.append(ind.item())
+            for actual_icd in actual_icds.cpu().tolist():
+                icds.append(actual_icd.item())
 
-    avg_f1 = total_f1 / len(dev_data)
+    f1 = f1_score(preds, icds, average='micro')
 
     if was_training:
         model.train()
 
-    return avg_f1
+    return f1
 
 
 def train(args: Dict):
@@ -320,24 +297,21 @@ def predict_icd_codes(args: Dict[str, str]):
             batch_src_text_tensor = model.vocab.discharge.to_input_tensor([single_src_text], device)
             batch_src_lengths = torch.tensor([single_source_lengths], dtype=torch.long, device=device)
 
-            model_out = model(batch_src_text_tensor, batch_src_lengths)
-            likelihoods = F.softmax(model_out).squeeze().tolist()
-            icd_preds = []
-            for i in range(len(likelihoods)):
-                if likelihoods[i] >= threshold:
-                    icd_preds.append(model.vocab.icd[i])
-            hypotheses.append(icd_preds)
+            model_out = model(batch_src_text_tensor, batch_src_lengths) # batch_size=1 x num_output_classes
+            top_output_class = torch.argmax(F.softmax(model_out, dim=1), dim=1).squeeze().item()
+
+            top_output_icd = model.vocab.icd.get_icd(top_output_class)
+            hypotheses.append(top_output_icd)
 
     if was_training: model.train(was_training)
 
     if test_icd_codes is not None:
-        test_icd_codes = model.vocab.icd.to_one_hot(test_icd_codes, device).tolist()
         precision, recall, f1, accuracy = evaluate_scores(test_icd_codes, hypotheses)
         print('Precision {}, recall {}, f1 {}, accuracy: {}'.format(precision, recall, f1, accuracy), file=sys.stderr)
 
     with open(args['OUTPUT_FILE'], 'w') as f:
         for hyps in hypotheses:
-            f.write(",".join(hyps) + '\n')
+            f.write(hyps + '\n')
 
 
 def main():

@@ -63,7 +63,7 @@ class DischargeLSTM(nn.Module):
         final_hidden = final_hidden.permute(1, 0, 2).contiguous() # (batch_size, 2, embed_size)
         final_hidden = final_hidden.view(final_hidden.shape[0], -1) # (batch_size, 2 * embed_size)
         lstm_out = self.linear(final_hidden)
-        lstm_out = self.dropout(lstm_out) # batch_size x len(vocab)
+        lstm_out = self.dropout(lstm_out) # batch_size x num_output_classes
         return lstm_out
 
     @staticmethod

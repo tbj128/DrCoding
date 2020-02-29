@@ -5,7 +5,7 @@ Takes the MIMIC-III data and preprocesses it in a format that can be used in our
 Tom Jin <tomjin@stanford.edu>
 
 Usage:
-    preprocess.py --icdmap=<file> --icd=<file> --notes=<file> [--sample]
+    preprocess.py --icdmap=<file> --icd=<file> --notes=<file> --top-k=<int> --top-k-per-patient=<int> [--sample]
 
 Options:
     -h --help                               show this screen.
@@ -13,6 +13,8 @@ Options:
     --icd=<file>                            path to the DIAGNOSES_ICD.csv containing ICD-9 codes for each patient stay
     --notes=<file>                          path to the NOTEEVENTS.csv containing the clinical notes
     --sample                                if set, looks at only one discharge summary from the clinical notes
+    --top-k=<int>                           filter overall data to keep patients with an ICD code within the top k most frequently occurring ICD codes [default: 50]
+    --top-k-per-patient=<int>               the number of ICD codes kept for each patient. eg. value of 1 means to produce the most relevant ICD code for each patient. -1 means that all ICD codes are kept. [default: -1]
 """
 
 from docopt import docopt
@@ -20,11 +22,13 @@ import csv
 import re
 
 class Preprocess():
-    def __init__(self, icdmap, icd, notes, take_sample):
+    def __init__(self, icdmap, icd, notes, take_sample, top_k, top_k_per_patient):
         self.f_icdmap = icdmap
         self.f_icd = icd
         self.f_notes = notes
         self.take_sample = take_sample
+        self.top_k = top_k
+        self.top_k_per_patient = top_k_per_patient
         self.icd_to_desc = {}
         self.condensed_icd_to_desc = {}
         self.hadmid_with_discharge = set()
@@ -56,12 +60,12 @@ class Preprocess():
 
         print("> Finished getting the ICD map description. Found {}".format(len(self.icd_to_desc)))
 
-    def extract_top_icd_codes(self, top_k=50):
+    def extract_top_icd_codes(self):
         """
         Extracts the top k ICD codes based on their frequency
 
         """
-        print("> Extracting the top {} ICD codes...".format(top_k))
+        print("> Extracting the top {} ICD codes...".format(self.top_k))
         icd_to_count = {}
         with open(self.f_icd, "r") as f:
             reader = csv.reader(f, delimiter=",")
@@ -86,7 +90,7 @@ class Preprocess():
 
         i = 0
         for key, value in sorted(icd_to_count.items(), key=lambda kv: kv[1], reverse=True):
-            if i >= top_k:
+            if i >= self.top_k:
                 break
             print("   ICD {} has count {}".format(key, value))
             self.top_icd_codes.add(key)
@@ -108,8 +112,12 @@ class Preprocess():
         num_icds = 0
         with open(self.f_icd, "r") as f:
             reader = csv.reader(f, delimiter=",")
+            next(reader, None) # skip header
             for line in reader:
+                if line[3] == '':
+                    continue
                 hadmid = line[2]
+                seq = int(line[3])
                 raw_icd_code = line[4]
                 icd_code = self._raw_icd_to_icd(raw_icd_code)
                 if icd_code not in self.top_icd_codes:
@@ -121,10 +129,15 @@ class Preprocess():
                     continue
 
                 if hadmid not in self.hadmid_to_icds:
-                    self.hadmid_to_icds[hadmid] = set()
+                    self.hadmid_to_icds[hadmid] = {}
                     num_hadmid_with_icd += 1
 
-                self.hadmid_to_icds[hadmid].add(icd_code)
+                if icd_code not in self.hadmid_to_icds[hadmid]:
+                    self.hadmid_to_icds[hadmid][icd_code] = seq
+                else:
+                    # Always take the ICD code that has the lower seq number (higher priority)
+                    if self.hadmid_to_icds[hadmid][icd_code] > seq:
+                        self.hadmid_to_icds[hadmid][icd_code] = seq
 
         for k, v in self.hadmid_to_icds.items():
             num_icds += len(v)
@@ -165,9 +178,9 @@ class Preprocess():
             reader = csv.reader(f, delimiter=",")
             next(reader, None) # Skip headers
             with open(self.f_notes + ".txt", "w") as fw:
-                with open(self.f_icd + ".txt", "w") as icd_fw:
+                with open(self.f_icd + ".top-" + (str(self.top_k_per_patient) if self.top_k_per_patient >= 0 else "all") + ".txt", "w") as icd_fw:
                     icd_writer = csv.writer(icd_fw, delimiter=",")
-                    with open(self.f_icd + ".desc.txt", "w") as icd_desc_fw:
+                    with open(self.f_icd + ".top-" + (str(self.top_k_per_patient) if self.top_k_per_patient >= 0 else "all") + ".desc.txt", "w") as icd_desc_fw:
                         icd_desc_writer = csv.writer(icd_desc_fw, delimiter=",")
 
                         # Pattern to remove all occurrences of [** name **], which are placeholders for names (HIPAA regulations)
@@ -182,22 +195,37 @@ class Preprocess():
                             hadmid = line[2]
                             category = line[6]
                             text = line[10]
-                            if category == "Discharge summary" and hadmid in self.hadmid_to_icds and len(self.hadmid_to_icds[hadmid]) > 0:
-                                text = text.lower().replace("\n", " ") # Convert to lower case and make one line
-                                text = re.sub('/', ' ', text) # Split slashes into two words
-                                text = hipaa_regex.sub("", text) # Remove name placeholders
-                                text = regex.sub("", text) # Remove punctuation, numbers, etc.
-                                text = ' '.join([w for w in text.split() if len(w) > 1]) # Remove single letters
-                                fw.write(text + "\n")
+                            if category == "Discharge summary" and hadmid in self.hadmid_to_icds and len(self.hadmid_to_icds[hadmid]) >= self.top_k_per_patient:
 
-                                icd_writer.writerow(self.hadmid_to_icds[hadmid])
+                                known_icds = []
+                                for icd, seq in self.hadmid_to_icds[hadmid].items():
+                                    known_icds.append({
+                                        "icd": icd,
+                                        "seq": seq
+                                    })
+                                known_icds = sorted(known_icds, key=lambda k: k['seq'])
+                                known_icds = list(map(lambda x: x["icd"], known_icds))
+                                if self.top_k_per_patient == -1:
+                                    patient_icds = known_icds
+                                else:
+                                    patient_icds = known_icds[:self.top_k_per_patient]
+
+                                icd_writer.writerow(patient_icds)
                                 desc_row = []
-                                for icd in self.hadmid_to_icds[hadmid]:
+                                for icd in patient_icds:
                                     if icd in self.condensed_icd_to_desc:
                                         desc_row.append(self.condensed_icd_to_desc[icd])
                                     else:
                                         desc_row.append("unk")
                                 icd_desc_writer.writerow(desc_row)
+
+                                text = text.lower().replace("\n", " ")  # Convert to lower case and make one line
+                                text = re.sub('/', ' ', text)  # Split slashes into two words
+                                text = hipaa_regex.sub("", text)  # Remove name placeholders
+                                text = regex.sub("", text)  # Remove punctuation, numbers, etc.
+                                text = ' '.join([w for w in text.split() if len(w) > 1])  # Remove single letters
+                                fw.write(text + "\n")
+
                                 num_discharge_summaries += 1
 
                                 if self.take_sample:
@@ -215,7 +243,7 @@ def main():
     Entry point of tool.
     """
     args = docopt(__doc__)
-    pp = Preprocess(args["--icdmap"], args["--icd"], args["--notes"], args["--sample"])
+    pp = Preprocess(args["--icdmap"], args["--icd"], args["--notes"], args["--sample"], int(args["--top-k"]), int(args["--top-k-per-patient"]))
     pp.get_icd_map()
     pp.extract_hadmids_with_discharge_summaries()
     pp.extract_top_icd_codes()
