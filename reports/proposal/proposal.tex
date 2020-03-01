@@ -1,0 +1,174 @@
+\documentclass{article}
+
+
+\usepackage[final]{neurips_2019}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{lipsum}
+
+\newcommand{\note}[1]{\textcolor{blue}{{#1}}}
+
+\title{
+  DrCoding: Predicting ICD-9 Codes on Discharge Summaries with Transformer Models \\
+  \vspace{1em}
+  \small{\normalfont Stanford CS224N Custom Project}
+}
+
+\author{
+  Boyang Tom Jin \\
+  Department of Computer Science \\
+  Stanford University \\
+  \texttt{tomjin@stanford.edu} \\
+  % Examples of more authors
+%   \And
+%   Name \\
+%   Department of Computer Science \\
+%   Stanford University \\
+%   \texttt{name@stanford.edu} \\
+%   \And
+%   Name \\
+%   Department of Computer Science \\
+%   Stanford University \\
+%   \texttt{name@stanford.edu}
+}
+
+\begin{document}
+
+\maketitle
+
+% \begin{abstract}
+%   Required for final report
+% \end{abstract}
+
+
+\section{Key Information to include}
+\begin{itemize}
+	\item
+		\textbf{Mentor}: We have no particular mentor
+\end{itemize}
+
+
+\section{Research paper summary (max 2 pages)}
+
+\begin{table}[h]
+    \centering
+    \begin{tabular}{ll}
+        \toprule
+        \textbf{Title} & Reformer: The Efficient Transformer \cite{kitaev2020reformer} \\
+        \midrule
+        \textbf{Venue} & ICLR 2020 \\
+        \textbf{Year}  & 2020 \\
+        \textbf{URL}   & \url{https://arxiv.org/abs/2001.04451} \\
+        \bottomrule
+    \end{tabular}
+    \vspace{1em}
+\end{table}
+
+\paragraph{Background.}
+In recent years, the natural language processing space has been revolutionized by the advent of the Transformer architecture, which has led to new state-of-the-art results in natural language tasks. At its core, Transformers relate each element in an input sequence to all other elements in the sequence by applying the concept of a scaled dot-product self-attention on the queries, keys, and values (ie. the projection matrices Q, K, and V) derived from the input: $softmax(\frac{QK^T}{\sqrt{d_k}}V)$
+
+The attention is then fed through a feed-forward layer where the output is normalized and fed to another attention module. Several attention modules are stacked in both the encoder and decoder. This means that unlike traditional RNN methods where the Markov property is respected in each sequence time step, Transformers end up utilizing a large amount of memory because the parameters of each layer must be kept in order to later perform back-propagation. For instance, even a 64K token sequence could not fit on a significant multi-accelerator hardware setup. Moreover, the self-attention calculation is also a computationally and memory expensive $O(L^2)$ operation (where $L$ is the length of the input sequence), bottle-necking the training process on long sequences. 
+
+\paragraph{Summary of contributions.}
+
+The Reformer model introduced by Kitaev et al. seeks to overcome the computational and memory constraints of traditional Transformers by using locality-sensitive hashing (LSH). LSH is a hashing scheme that maps each vector to a hash such that similar vectors would be hashed to the same hash bucket with high probability. Here specifically, the authors use random projections for the hashing approach. 
+
+LSH is used to approximate the $softmax(QK^T)$ calculation in the attention function. While this calculation is used to find tokens in $K$ that are close to some query $q_i$, LSH finds the closest tokens in $K$ in a nearest neighbor fashion. To do this, the authors assumed that $Q=K$ and later empirically demonstrated that this assumption does not adversely affect the performance of the Transformer. 
+
+To prevent hash buckets from containing an uneven number of query tokens, which can complicate batching across buckets, the buckets are sorted and divided into similar sized chunks. Attention is then applied on query tokens within each chunk and across neighboring chunks. As hashing is still a probabilistic operation, the authors also apply multiple rounds of hashing to reduce the probability that similar items fall into different buckets. Overall, due to the sorting that occurs, the LSH scheme is reduced to an $O(Llog(L))$ operation. 
+
+Another memory optimization that the authors made was using reversible residual layers. In the traditional Transformer, the memory usage is dependent on both a $d_{ff}$ and $n_l$ factor, where $d_{ff}$ is the domain size of the feed-forward layers within each Transformer module, and $n_l$ is the number of modules. First introduced by Gomez et al., a reversible residual layer consists of a pair of inputs/outputs and addresses the $n_l$ factor \cite{gomez2017reversible}: 
+$$
+	y_1 = x_1 + F(x_2) \text{ and } y_2 = x_2 + G(y_1)
+$$
+where in this case, $F$ is the Attention function and $G$ is the feed-forward function. 
+
+By producing these two outputs, the residuals of each layer can be recovered one-by-one during the backwards pass by subtracting the residuals as follows:
+$$
+x_2 = y_2 - G(y_1) \text{ and } x_1 = y_1 - F(x_2)
+$$
+
+Since the feed-forward calculations are independent across positions in a sequence, the computations can also be split into $c$ chunks such that each chunk can be brought into memory and computed one at a time. This reduces the memory constraint brought by the dimension $d_{ff}$, which can be 4K or higher. 
+
+The authors demonstrated the above optimizations by running experiments on 64K token length sequences from imagenet64 and enwik8-64K tasks, where the former is a down-sampled image dataset and the latter is a text dataset derived from a Wikipedia dump. Compared to a regular Transformer, the authors showed that regular attention becomes exponentially slower with increasing sequence length while the LSH attention stayed relatively constant in speed. They also demonstrated that eight LSH hashing rounds results in a performance comparable to using the full attention provided by a regular Transformer. They also showed no adverse performance resulting from using reversible layers or shared query-key space. 
+
+
+\paragraph{Limitations and discussion.}
+
+The primary benefit of the author’s proposed methodology is a reduction in the memory usage of the Transformer architecture. Curiously, they did not share any specific metrics or measures to demonstrate this. While they claimed that they could not train a Transformer baseline model due to memory limitations, they could have compared the accuracy and memory usage of the Reformer model against a Transformer baseline using a smaller, more manageable input dataset. 
+
+Furthermore, the authors should also share results of the overall speed and performance of the full Reformer model (including using reversible-layers) on real-world datasets. As it stands, the authors only compared the attention evaluation speed between full and LSH attention on synthetic data which raises questions on how well the model works in practice. 
+
+While these limitations do raise some questions, I believe they do not detract from the fundamental message conveyed by the paper. While the optimizations presented are novel to Transformers, each optimization is a well-known computational technique with proven success in other use cases (for instance, random projections are related to the well-known SimHash function). As such, I am convinced of the merits of the LSH and reversible-layer approach especially given the promising, albeit limited, results.
+
+
+\paragraph{Why this paper?}
+
+This paper was chosen in part due to the tremendous improvements (sometimes even better than human performance) in neural language tasks that Transformer-derivative models such as BERT have accomplished. The next logical step would be to optimize these methods so they can be more wildly adopted, such as running on a lower-powered device such as a mobile phone. Even if the paper was not perfect, I’ve gained a great deal of understanding about the straightforward tricks that can be applied to achieve a significant improvement in the standard Transformer model.
+
+
+\paragraph{Wider research context.}
+
+The paper itself does not make any fundamental changes to the Transformer model, so the representations of the model remains the same. That said, this paper introduces methods that can improve the performance of a broad range of NLP tasks and improve the accessibility of the Transformer model. Many NLP tasks today are limited by the length of the tokens that can be used as input – many generative tasks require long sequences. For instance, Liu et al. attempted to generate entire Wikipedia articles by applying extractive summarization on entire documents (with up to 11K tokens as input) \cite{liu2018generating}. Because these long sequences are inherently expensive to train on (quadratic in terms of the input length), any improvements in performance can be extremely beneficial. Indeed, the techniques presented are not even limited to the Transformer model. For instance, the reversible-layer optimization could be applied to any deep-layered model, regardless of the specific use case. 
+
+
+
+
+\section{Project description (1-2 pages)}
+
+\paragraph{Goal.} 
+ICD-9 codes are a standardized set of six-character codes that represents the full spectrum of diagnoses and procedures performed in hospitals. These codes are used for billing and reporting purposes and are generally manually assigned to a patient’s electronic medical records by a trained hospital coder. Because this task can be both error prone and inconsistent between coders, there have been many attempts at automating this procedure over the years. \cite{perotte2014diagnosis}
+
+We are interested in applying the recent advancements in neural language processing towards the prediction of ICD-9 codes based on patient discharge summaries. Specifically, we will focus on investigating the performance of a standard deep Transformer model on the ICD-9 prediction task. The self-attention mechanisms used by Transformers are ideal for analyzing discharge summaries as the summaries are generally focused on a single patient event and therefore are rich in context. 
+
+One computational and memory limitation in past investigations have been the length of discharge summaries (whose lengths can exceed over 1000 words) \cite{ayyar2016tagging}. Solutions to this have generally been to truncate the clinical note but this can throw away potentially useful information. Since Transformer architectures are notoriously memory-intensive and are generally limited to 512-tokens as input, we will also explore the application of the Reformer architecture (as presented in the paper summary) on the ICD-9 prediction task. This Reformer architecture should help us scale to over 10K of input tokens, which means that even the largest discharge summaries can be used as input in its entirety. 
+
+As a stretch goal, we can look at applying recent state-of-the-art BERT models on the same ICD-9 prediction task. In particular, we can use existing BERT embeddings trained on biological and clinical data (such as BioBert) and fine-tune them on the discharge note dataset \cite{lee2019biobert}. It would be interesting to see how the tokenization applies to abbreviations and word misspellings commonplace within the discharge notes. 
+
+
+\paragraph{Task.} 
+The ICD-9 code prediction task could be seen as a multi-label classification problem:
+\begin{itemize}
+	\item
+		\textbf{Input}: A clinical discharge summary note of variable length.\\
+		For instance: “Thoracic studies also included an x-ray, which confirmed tertiary lesions in the upper lung quadrant consistent with a tuberculosis infection. … [multiple paragraphs]”
+	\item
+		\textbf{Output}: A set of ICD-9 codes assigned to the discharge summary. As ICD-9 are hierarchical in nature, as a first pass we will output only the top-level ICD-9 codes (taking the first three-digits of the ICD-9 codes) and then experiment with varying depths later on. \\
+		For instance (top-level): [“287”, “583”, “129”]\\
+		For instance (granular): [“287.52”, “583.81”, “129.343”]
+\end{itemize}
+
+
+\paragraph{Data.}
+We will utilize the MIMIC-III dataset, an openly available electronic medical record dataset comprising of over 60,000 ICU patients who stayed at the Beth Israel Deaconess Medical Center between 2001 and 2012 \cite{johnson2016mimic}. For each patient stay, the MIMIC-III dataset contains detailed de-identified patient vital sign, medication, lab tests, and clinical discharge summaries. Each discharge summary is on average approximately 1000 words in length. The manually annotated ICD-9 codes are also available for each patient stay. 
+
+For this study, we will focus on extracting the patient discharge summary notes (which are a subset of all the notes available) and the ICD-9 codes. Within the notes, we will remove unnecessary metadata such as section dividers, job IDs, discharge times, requester names, etc. To comply with HIPAA de-identification regulations, sensitive data such as patient names, dates, and hospital names were replaced by placeholders. We plan to either replace these with meaningful tokens or remove them altogether from the dataset. The final dataset should also be all lowercase. 
+
+
+\paragraph{Methods.}
+Our primary neural methods will be the Transformer architecture along with the Reformer optimizations as described in the paper summary. We will build a deep Transformer encoder model using existing basic implementations of the Reformer proposal (such as the “reformer-pytorch” Github repository). The final hidden states of the model will be fed into a multi-label classifier with a loss function possibly customized to the hierarchical nature of the ICD-9 prediction problem. We anticipate that we will need to experiment with different levels of regularization, network depth, and dropout within the model. 
+
+We will also explore recurrent neural networks in the baseline through the implementation of a basic LSTM-based model, although we expect this to be limited in scope as the performance is expected to be a bottleneck. 
+
+Finally, time permitting, we will also fine-tune an existing Bert model (for instance, using the pre-trained embeddings from ClinicalBERT) using our extracted discharge summaries for our prediction task \cite{alsentzer2019publicly}. 
+
+\paragraph{Baselines.}
+For our baseline, we will create an LSTM-based model that will perform multi-label sequence classification. Due to performance restrictions, the LSTM will read in a fixed window of words derived from each patient discharge summary to produce an ICD-9 prediction. We will also provide visibility into any previously published results.
+
+\paragraph{Evaluation.}
+The evaluation of the model will be done by calculating the precision and recall (along with AUC score) as well as the F1 score of the predicted ICD-9 codes when compared against the actual ICD-9 codes. Existing methods using LSTM-based models achieved a precision of 0.799, recall of 0.685, and an F1 score of 0.708 \cite{ayyar2016tagging}. While we believe our basic LSTM-based baseline will not achieve similar numbers (as we will not focus on fine-tuning this model), we believe that our Transformer-based architecture should achieve similar if not better performance as it is able to use more of the discharge summary as input and therefore have more context to feed into the predictions. 
+
+\bibliographystyle{unsrt}
+\bibliography{references}
+
+\end{document}

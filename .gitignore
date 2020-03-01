@@ -3,6 +3,17 @@
 # OSX/Dev Environment files
 .DS_Store
 .idea
+*.aux
+*.out
+*.docx
+*.log
+*.zip
+*.bin
+*.bin.optim
+*.blg
+*.bbl
+*.gz
+*.pdf
 
 # Data files are protected and should be downloaded from the MIMIC-III website
 data
