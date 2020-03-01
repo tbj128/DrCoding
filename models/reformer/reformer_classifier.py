@@ -14,17 +14,6 @@ from torch.utils.data import DataLoader, Dataset
 from vocab import Vocab
 from utils import read_source_text, read_icd_codes
 
-# constants
-
-NUM_BATCHES = int(1e5)
-BATCH_SIZE = 4
-GRADIENT_ACCUMULATE_EVERY = 4
-LEARNING_RATE = 1e-4
-VALIDATE_EVERY  = 100
-GENERATE_EVERY  = 500
-GENERATE_LENGTH = 512
-SEQ_LEN = 128
-
 # instantiate model
 
 def default(val, default_val):
