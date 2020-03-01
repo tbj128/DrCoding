@@ -307,7 +307,7 @@ def train(args: Dict):
 def predict_icd_codes(args: Dict[str, str]):
     print("load test source sentences from [{}]".format(args['TEST_SOURCE_FILE']), file=sys.stderr)
     use_cls = args["--model"] != "baseline"
-    test_source_text, test_source_lengths = read_source_text(args['TEST_SOURCE_FILE'], target_length=args["--target-length"], use_cls=use_cls)
+    test_source_text, test_source_lengths = read_source_text(args['TEST_SOURCE_FILE'], target_length=len(args["--target-length"]), use_cls=use_cls)
 
     if args['TEST_TARGET_FILE']:
         print("load test icd codes from [{}]".format(args['TEST_TARGET_FILE']), file=sys.stderr)
