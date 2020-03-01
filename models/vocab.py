@@ -75,6 +75,17 @@ class ICDVocab(object):
         else:
             return self.icd2id[word]
 
+    def to_tensor(self, icds, device):
+        """
+
+        :param icds:
+        :return:
+        """
+        data = []
+        for icd_row in icds:
+            data.append(self.icd2id[icd_row])
+        return torch.tensor(data, dtype=torch.float, device=device)
+
     def to_one_hot(self, icds, device):
         """
 

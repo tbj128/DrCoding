@@ -181,7 +181,8 @@ def train(args: Dict):
 
     model = model.to(device)
 
-    lossFunc = nn.BCEWithLogitsLoss(reduction='sum')
+    # lossFunc = nn.BCEWithLogitsLoss(reduction='sum') # Use BCEWithLogitsLoss for multi-label prediction
+    lossFunc = nn.CrossEntropyLoss(reduction='sum') # Use CrossEntropyLoss for multi-label prediction
     optimizer = torch.optim.Adam(model.parameters(), lr=float(args['--lr']))
 
     num_trial = 0
@@ -204,7 +205,7 @@ def train(args: Dict):
 
             batch_src_text_tensor = model.vocab.discharge.to_input_tensor(batch_src_text, device)
             batch_src_lengths = torch.tensor(batch_src_lengths, dtype=torch.long, device=device)
-            batch_icd_codes = model.vocab.icd.to_one_hot(batch_icd_codes, device)
+            batch_icd_codes = model.vocab.icd.to_tensor(batch_icd_codes, device) # use to_one_hot if doing multi-label
 
             if args['--verbose']:
                 print("  > epoch {} iter {} batch_src_text {}".format(epoch, train_iter, batch_src_text_tensor.shape))
@@ -317,7 +318,10 @@ def predict_icd_codes(args: Dict[str, str]):
     test_data = list(zip(test_source_text, test_source_lengths, test_icd_codes))
 
     print("load model from {}".format(args['MODEL_PATH']), file=sys.stderr)
-    model = DischargeLSTM.load(args['MODEL_PATH'])
+    if args["--model"] == "baseline":
+        model = DischargeLSTM.load(args['MODEL_PATH'])
+    else:
+        model = ReformerClassifier.load(args['MODEL_PATH'])
 
     if args['--cuda']:
         model = model.to(torch.device("cuda:0"))
