@@ -67,7 +67,7 @@ import logging
 logger = logging.getLogger('drcoding')
 logger.setLevel(logging.DEBUG)
 fh = logging.FileHandler('drcoding.log')
-fh.setLevel(logging.ERROR)
+fh.setLevel(logging.INFO)
 # create formatter and add it to the handlers
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 fh.setFormatter(formatter)
