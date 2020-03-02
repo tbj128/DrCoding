@@ -48,7 +48,7 @@ class TransformerClassifier(nn.Module):
         self.pos_emb = FixedPositionEmbedding(emb_dim) if fixed_position_emb else nn.Embedding(max_seq_len, emb_dim)
         self.to_model_dim = identity if emb_dim == dim else nn.Linear(emb_dim, dim)
 
-        encoder_layer = nn.TransformerEncoderLayer(d_model=dim, nhead=num_heads, dropout=self.layer_dropout)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=dim, nhead=num_heads, dropout=0.1)
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=depth)
 
         self.to_logits = nn.Linear(dim, num_tokens)
@@ -57,21 +57,29 @@ class TransformerClassifier(nn.Module):
         self.dropout = nn.Dropout(self.layer_dropout)
 
 
-    def forward(self, x, **kwargs):
+    def forward(self, x, source_lengths, **kwargs):
+        # x batch size must be in the middle
+        # mask = self.generate_sent_masks(x, source_lengths)
+
         # t = torch.arange(x.shape[1], device=x.device)
         x = self.token_emb(x)
+        x = x.permute(x.shape[1], x.shape[0], x.shape[2]).contiguous()
+
         # x = x + self.pos_emb(t).type(x.type())
 
         # x = self.to_model_dim(x) # (bs, seq length, dim)
-        hidden_state = self.transformer_encoder(x, **kwargs)  # (bs, seq length, dim)
+        # hidden_state = self.transformer_encoder(x, mask=mask, **kwargs)  # (bs, seq length, dim)
+        hidden_state = self.transformer_encoder(x, **kwargs)  # (seq length, bs, dim)
         # hidden_state = x
 
-        # pooled_output = hidden_state[:, 0, :]  # (bs, dim) - we take the first character (the CLS token)
-        pooled_output = torch.mean(hidden_state, dim=1)
+        pooled_output = hidden_state[0, :, :]  # (bs, dim) - we take the first character (the CLS token)
+        # pooled_output = torch.mean(hidden_state, dim=0)
+
+
         pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
         # pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)
         pooled_output = nn.Tanh()(pooled_output)  # (bs, dim)
-        # pooled_output = self.dropout(pooled_output)  # (bs, dim)
+        pooled_output = self.dropout(pooled_output)  # (bs, dim)
         logits = self.classifier(pooled_output)  # (bs, dim)
 
         return logits
@@ -111,3 +119,11 @@ class TransformerClassifier(nn.Module):
         }
 
         torch.save(params, path)
+
+    def generate_sent_masks(self, x, source_lengths) -> torch.Tensor:
+        enc_masks = torch.zeros(x.size(0), x.size(1), x.size(1), device=x.device)
+        for e_id, src_len in enumerate(source_lengths):
+            enc_masks[e_id, src_len:, src_len:] = float('-inf') # Mask padding
+        # enc_masks = enc_masks.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
+        return enc_masks
+

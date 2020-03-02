@@ -103,10 +103,7 @@ def predict_output(args, model, dev_data, device, batch_size=32, is_test=False):
             batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
             batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)
 
-            if args['--model'] == 'baseline':
-                model_out = model(batch_src_text_tensor, batch_src_lengths)
-            else:
-                model_out = model(batch_src_text_tensor)
+            model_out = model(batch_src_text_tensor, batch_src_lengths)
             top_prediction_indices = torch.argmax(F.softmax(model_out, dim=1), dim=1)  # bs x 1
 
             for ind in top_prediction_indices.cpu().tolist():
@@ -249,10 +246,7 @@ def train(args: Dict):
             if args['--verbose']:
                 print("  > epoch {} iter {} batch_src_text {}".format(epoch, train_iter, batch_src_text_tensor.shape))
 
-            if args['--model'] == 'baseline':
-                model_output = model(batch_src_text_tensor, batch_src_lengths)
-            else:
-                model_output = model(batch_src_text_tensor)
+            model_output = model(batch_src_text_tensor, batch_src_lengths)
             example_losses = lossFunc(model_output, batch_icd_codes)
             batch_loss = example_losses.sum()
             loss = batch_loss / batch_size
