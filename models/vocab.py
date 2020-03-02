@@ -103,9 +103,8 @@ class ICDVocab(object):
     @staticmethod
     def from_source(source_icds):
         icd_vocab = ICDVocab()
-        for icds in source_icds:
-            for icd in icds:
-                icd_vocab.add(icd.strip())
+        for icd in source_icds:
+            icd_vocab.add(icd.strip())
 
         print('number of ICDs: {}'.format(len(icd_vocab.icd2id)))
         return icd_vocab
