@@ -35,6 +35,8 @@ Options:
     --valid-niter=<int>                     perform validation after how many iterations [default: 100]
     --dropout=<float>                       dropout [default: 0.5]
     --max-decoding-time-step=<int>          maximum number of decoding time steps [default: 70]
+    --transformer-depth=<int>               number of Transformer encoder layers to use [default: 6]
+    --transformer-heads=<int>               number of Transformer heads to use [default: 8]
     --verbose                               show additional logging
 """
 import math
@@ -58,6 +60,7 @@ import torch.nn.functional as F
 
 from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
 
+from vanilla_transformer.transformer_classifier import TransformerClassifier
 from vocab import Vocab
 import logging
 
@@ -169,21 +172,32 @@ def train(args: Dict):
         model = ReformerClassifier(
             vocab=vocab,
             dim=int(args['--word-embed-size']),
-            depth=6,
+            depth=int(args['--transformer-depth']),
             max_seq_len=int(args['--target-length']),
-            num_heads=8,
+            num_heads=int(args['--transformer-heads']),
             bucket_size=64,
             n_hashes=4,
             ff_chunks=10,
-            lsh_dropout=float(args['--dropout']),
+            lsh_dropout=0.1,
+            layer_dropout=float(args['--dropout']),
             weight_tie=True,
             causal=True,
             use_full_attn=False # set this to true for comparison with full attention
         )
-        if args['--cuda']:
-            model.cuda()
+    elif model_type == "transformer":
+        model = TransformerClassifier(
+            vocab=vocab,
+            dim=int(args['--word-embed-size']),
+            depth=int(args['--transformer-depth']),
+            max_seq_len=int(args['--target-length']),
+            num_heads=int(args['--transformer-heads']),
+            layer_dropout=float(args['--dropout'])
+        )
     else:
         raise NotImplementedError("Invalid model type")
+
+    if args['--cuda']:
+        model.cuda()
 
     model.train()
 
