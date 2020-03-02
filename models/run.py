@@ -59,7 +59,24 @@ import torch.nn.functional as F
 from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
 
 from vocab import Vocab
+import logging
 
+################################################################################
+# LOGGER setup
+
+logger = logging.getLogger('drcoding')
+logger.setLevel(logging.DEBUG)
+fh = logging.FileHandler('drcoding.log')
+fh.setLevel(logging.ERROR)
+# create formatter and add it to the handlers
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+fh.setFormatter(formatter)
+# add the handlers to the logger
+logger.addHandler(fh)
+
+logger.info('Starting run.py')
+
+################################################################################
 
 def evaluate_scores(references: List[str], predicted: List[str]):
     """
@@ -192,6 +209,7 @@ def train(args: Dict):
     train_time = begin_time = time.time()
 
     print('Starting baseline training...')
+    logger.info('Starting baseline training...')
 
     while True:
         epoch += 1
@@ -246,6 +264,12 @@ def train(args: Dict):
                                                                                          total_examples,
                                                                                          total_processed_words / (time.time() - train_time),
                                                                                          time.time() - begin_time), file=sys.stderr)
+                logger.info('epoch %d, iter %d, avg. loss %.2f ' \
+                      'total examples %d, speed %.2f words/sec, time elapsed %.2f sec' % (epoch, train_iter,
+                                                                                         total_loss / total_examples,
+                                                                                         total_examples,
+                                                                                         total_processed_words / (time.time() - train_time),
+                                                                                         time.time() - begin_time))
 
                 train_time = time.time()
                 total_examples = total_loss = total_processed_words = 0.
@@ -253,11 +277,13 @@ def train(args: Dict):
             # perform validation
             if train_iter % valid_niter == 0 or epoch == int(args['--max-epoch']):
                 print('begin validation ...', file=sys.stderr)
+                logger.info('begin validation ...')
 
                 dev_f1 = evaluate_model_with_dev(args, model, dev_data, device, batch_size=128)   # dev batch size can be a bit larger
                 valid_metric = dev_f1
 
                 print('validation: iter %d, dev. f1 %f' % (train_iter, dev_f1), file=sys.stderr)
+                logger.info('validation: iter %d, dev. f1 %f' % (train_iter, dev_f1))
 
                 is_better = len(hist_valid_scores) == 0 or valid_metric > max(hist_valid_scores)
                 hist_valid_scores.append(valid_metric)
@@ -265,6 +291,7 @@ def train(args: Dict):
                 if is_better:
                     patience = 0
                     print('save currently the best model to [%s]' % model_save_path, file=sys.stderr)
+                    logger.info('save currently the best model to [%s]' % model_save_path)
                     model.save(model_save_path)
 
                     # also save the optimizers' state
@@ -272,12 +299,15 @@ def train(args: Dict):
                 elif patience < int(args['--patience']):
                     patience += 1
                     print('hit patience %d' % patience, file=sys.stderr)
+                    logger.info('hit patience %d' % patience)
 
                     if patience == int(args['--patience']):
                         num_trial += 1
                         print('hit #%d trial' % num_trial, file=sys.stderr)
+                        logger.info('hit #%d trial' % num_trial)
                         if num_trial == int(args['--max-num-trial']):
                             print('early stop!', file=sys.stderr)
+                            logger.info('early stop!')
                             exit(0)
 
                         # decay lr, and restore from previously best checkpoint
@@ -301,6 +331,7 @@ def train(args: Dict):
 
             if epoch == int(args['--max-epoch']):
                 print('reached maximum number of epochs!', file=sys.stderr)
+                logger.info('reached maximum number of epochs!')
                 exit(0)
 
 
@@ -339,6 +370,7 @@ def predict_icd_codes(args: Dict[str, str]):
     if test_icd_codes is not None:
         precision, recall, f1, accuracy = evaluate_scores(icds, preds)
         print('Precision {}, recall {}, f1 {}, accuracy: {}'.format(precision, recall, f1, accuracy), file=sys.stderr)
+        logger.info('Precision {}, recall {}, f1 {}, accuracy: {}'.format(precision, recall, f1, accuracy))
 
     with open(args['OUTPUT_FILE'], 'w') as f:
         for pred in preds:
@@ -360,6 +392,8 @@ def main():
     if args['--cuda']:
         torch.cuda.manual_seed(seed)
     np.random.seed(seed * 13 // 7)
+
+    logger.info("Running with the following args: {}".format(args))
 
     if args['train']:
         train(args)
