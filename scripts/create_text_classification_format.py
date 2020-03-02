@@ -29,6 +29,7 @@ class CreateTextClassificationFormat(object):
     def run(self):
         notes = []
         icds = []
+        icd_map = {}
         with open(self.note_file, 'r') as fn:
             with open(self.icd_file, 'r') as fi:
                 print("Reading note file...")
@@ -37,16 +38,18 @@ class CreateTextClassificationFormat(object):
                 print("Finished reading note file.")
                 print("Reading ICD file...")
                 for row in fi:
-                    icds.append(row.strip())
+                    if row.strip() not in icd_map:
+                        icd_map[row.strip()] = len(icd_map)
+                    icds.append(icd_map[row.strip()])
                 print("Finished reading ICD file.")
 
         output_train = []
         output_test = []
         for i, icd in enumerate(icds):
             if i < len(notes) * 0.7:
-                output_train.append(icds[i] + "," + notes[i])
+                output_train.append(str(icds[i]) + "," + notes[i])
             else:
-                output_test.append(icds[i] + "," + notes[i])
+                output_test.append(str(icds[i]) + "," + notes[i])
 
         self._write("text_classification.train", output_train)
         self._write("text_classification.test", output_test)
