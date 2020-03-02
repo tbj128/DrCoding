@@ -94,7 +94,7 @@ def evaluate_scores(references: List[str], predicted: List[str]):
 
     return precision, recall, f1, accuracy
 
-def predict_output(args, model, dev_data, device, batch_size=32):
+def predict_output(args, model, dev_data, device, batch_size=32, is_test=False):
     preds = []
     icds = []
     completed = 0
@@ -116,7 +116,8 @@ def predict_output(args, model, dev_data, device, batch_size=32):
                 icds.append(actual_icd)
 
             completed += len(src_text)
-            print("   > Completed {}/{}".format(completed, len(dev_data)), end='\r', flush=True)
+            if is_test:
+                print("   > Completed {}/{}".format(completed, len(dev_data)), end='\r', flush=True)
     return preds, icds
 
 def evaluate_model_with_dev(args, model, dev_data, device, batch_size=32):
@@ -127,14 +128,19 @@ def evaluate_model_with_dev(args, model, dev_data, device, batch_size=32):
     model.eval()
 
     # no_grad() signals backend to throw away all gradients
-    preds, icds = predict_output(args, model, dev_data, device, batch_size)
+    preds, icds = predict_output(args, model, dev_data, device, batch_size, is_test=False)
 
-    f1 = f1_score(preds, icds, average='micro')
+    # print("-----------------------")
+    # print("Preds {}".format(preds))
+    # print("Actual {}".format(icds))
+    # print("-----------------------")
+
+    precision, recall, f1, accuracy = evaluate_scores(icds, preds)
 
     if was_training:
         model.train()
 
-    return f1
+    return precision, recall, f1, accuracy
 
 
 def train(args: Dict):
@@ -201,11 +207,11 @@ def train(args: Dict):
 
     model.train()
 
-    uniform_init = float(args['--uniform-init'])
-    if np.abs(uniform_init) > 0.:
-        print('uniformly initialize parameters [-%f, +%f]' % (uniform_init, uniform_init), file=sys.stderr)
-        for p in model.parameters():
-            p.data.uniform_(-uniform_init, uniform_init)
+    # uniform_init = float(args['--uniform-init'])
+    # if np.abs(uniform_init) > 0.:
+    #     print('uniformly initialize parameters [-%f, +%f]' % (uniform_init, uniform_init), file=sys.stderr)
+    #     for p in model.parameters():
+    #         p.data.uniform_(-uniform_init, uniform_init)
 
     device = torch.device("cuda:0" if args['--cuda'] else "cpu")
     print('Using device: %s' % device, file=sys.stderr)
@@ -235,6 +241,7 @@ def train(args: Dict):
 
             batch_size = len(batch_src_text)
 
+            orig_train_batch = zip(batch_src_text, batch_src_lengths, batch_icd_codes)
             batch_src_text_tensor = model.vocab.discharge.to_input_tensor(batch_src_text, device)
             batch_src_lengths = torch.tensor(batch_src_lengths, dtype=torch.long, device=device)
             batch_icd_codes = model.vocab.icd.to_tensor(batch_icd_codes, device) # use to_one_hot if doing multi-label
@@ -288,16 +295,18 @@ def train(args: Dict):
                 train_time = time.time()
                 total_examples = total_loss = total_processed_words = 0.
 
+                # precision, recall, f1, accuracy = evaluate_model_with_dev(args, model, list(orig_train_batch), device, batch_size=batch_size, is_test=False)
+                # print("----")
+                # print('TRAIN | Precision {}, recall {}, f1 {}, accuracy: {}'.format(precision, recall, f1, accuracy), file=sys.stderr)
+                # print("----")
+
             # perform validation
             if train_iter % valid_niter == 0 or epoch == int(args['--max-epoch']):
-                print('begin validation ...', file=sys.stderr)
-                logger.info('begin validation ...')
+                precision, recall, f1, accuracy = evaluate_model_with_dev(args, model, dev_data, device, batch_size=128)   # dev batch size can be a bit larger
+                valid_metric = f1
 
-                dev_f1 = evaluate_model_with_dev(args, model, dev_data, device, batch_size=128)   # dev batch size can be a bit larger
-                valid_metric = dev_f1
-
-                print('validation: iter %d, dev. f1 %f' % (train_iter, dev_f1), file=sys.stderr)
-                logger.info('validation: iter %d, dev. f1 %f' % (train_iter, dev_f1))
+                print('VALIDATION: {} | Precision {}, recall {}, f1 {}, accuracy: {}'.format(train_iter, precision, recall, f1, accuracy), file=sys.stderr)
+                logger.info('VALIDATION: {} | Precision {}, recall {}, f1 {}, accuracy: {}'.format(train_iter, precision, recall, f1, accuracy))
 
                 is_better = len(hist_valid_scores) == 0 or valid_metric > max(hist_valid_scores)
                 hist_valid_scores.append(valid_metric)
@@ -365,8 +374,12 @@ def predict_icd_codes(args: Dict[str, str]):
     print("load model from {}".format(args['MODEL_PATH']), file=sys.stderr)
     if args["--model"] == "baseline":
         model = DischargeLSTM.load(args['MODEL_PATH'])
-    else:
+    elif args["--model"] == "reformer":
         model = ReformerClassifier.load(args['MODEL_PATH'])
+    elif args["--model"] == "transformer":
+        model = TransformerClassifier.load(args['MODEL_PATH'])
+    else:
+        raise NotImplementedError("Not implemented")
 
     if args['--cuda']:
         model = model.to(torch.device("cuda:0"))
@@ -377,7 +390,7 @@ def predict_icd_codes(args: Dict[str, str]):
     device = torch.device("cuda:0" if args['--cuda'] else "cpu")
     print('Using device: %s' % device, file=sys.stderr)
 
-    preds, icds = predict_output(args, model, test_data, device, batch_size=128)
+    preds, icds = predict_output(args, model, test_data, device, batch_size=128, is_test=True)
 
     if was_training: model.train(was_training)
 

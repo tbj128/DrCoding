@@ -60,7 +60,7 @@ def read_icd_codes(file_path):
             out = []
             for icd in line.split(","):
                 out.append(icd.strip())
-            icds.append(out)
+            icds.append(out[0])
     return icds
 
 

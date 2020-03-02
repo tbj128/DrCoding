@@ -58,16 +58,20 @@ class TransformerClassifier(nn.Module):
 
 
     def forward(self, x, **kwargs):
-        t = torch.arange(x.shape[1], device=x.device)
+        # t = torch.arange(x.shape[1], device=x.device)
         x = self.token_emb(x)
-        x = x + self.pos_emb(t).type(x.type())
+        # x = x + self.pos_emb(t).type(x.type())
 
-        x = self.to_model_dim(x)
+        # x = self.to_model_dim(x) # (bs, seq length, dim)
         hidden_state = self.transformer_encoder(x, **kwargs)  # (bs, seq length, dim)
-        pooled_output = hidden_state[:, 0, :]  # (bs, dim) - we take the first character (the CLS token)
+        # hidden_state = x
+
+        # pooled_output = hidden_state[:, 0, :]  # (bs, dim) - we take the first character (the CLS token)
+        pooled_output = torch.mean(hidden_state, dim=1)
         pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
-        pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)
-        pooled_output = self.dropout(pooled_output)  # (bs, dim)
+        # pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)
+        pooled_output = nn.Tanh()(pooled_output)  # (bs, dim)
+        # pooled_output = self.dropout(pooled_output)  # (bs, dim)
         logits = self.classifier(pooled_output)  # (bs, dim)
 
         return logits

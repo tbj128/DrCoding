@@ -83,7 +83,7 @@ class ICDVocab(object):
         """
         data = []
         for icd_row in icds:
-            data.append(self.icd2id[icd_row[0]])
+            data.append(self.icd2id[icd_row])
         return torch.tensor(data, dtype=torch.long, device=device)
 
     def to_one_hot(self, icds, device):
