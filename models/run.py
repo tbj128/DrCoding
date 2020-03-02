@@ -33,7 +33,7 @@ Options:
     --uniform-init=<float>                  uniformly initialize all parameters [default: 0.1]
     --save-to=<file>                        model save path [default: model.bin]
     --valid-niter=<int>                     perform validation after how many iterations [default: 100]
-    --dropout=<float>                       dropout [default: 0.3]
+    --dropout=<float>                       dropout [default: 0.5]
     --max-decoding-time-step=<int>          maximum number of decoding time steps [default: 70]
     --verbose                               show additional logging
 """
@@ -158,7 +158,7 @@ def train(args: Dict):
             bucket_size=64,
             n_hashes=4,
             ff_chunks=10,
-            lsh_dropout=0.1,
+            lsh_dropout=float(args['--dropout']),
             weight_tie=True,
             causal=True,
             use_full_attn=False # set this to true for comparison with full attention
