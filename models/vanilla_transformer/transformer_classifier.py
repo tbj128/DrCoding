@@ -48,13 +48,13 @@ class TransformerClassifier(nn.Module):
         self.pos_emb = FixedPositionEmbedding(emb_dim) if fixed_position_emb else nn.Embedding(max_seq_len, emb_dim)
         self.to_model_dim = identity if emb_dim == dim else nn.Linear(emb_dim, dim)
 
-        encoder_layer = nn.TransformerEncoderLayer(d_model=dim, nhead=num_heads, dropout=self.layer_dropout)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=dim, nhead=num_heads)
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=depth)
 
         self.to_logits = nn.Linear(dim, num_tokens)
         self.pre_classifier = nn.Linear(dim, dim)
         self.classifier = nn.Linear(dim, self.num_output_classes)
-        self.dropout = nn.Dropout(0.3)
+        self.dropout = nn.Dropout(self.layer_dropout)
 
 
     def forward(self, x, **kwargs):
@@ -71,7 +71,7 @@ class TransformerClassifier(nn.Module):
         pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
         # pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)
         pooled_output = nn.Tanh()(pooled_output)  # (bs, dim)
-        # pooled_output = self.dropout(pooled_output)  # (bs, dim)
+        pooled_output = self.dropout(pooled_output)  # (bs, dim)
         logits = self.classifier(pooled_output)  # (bs, dim)
 
         return logits
