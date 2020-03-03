@@ -62,11 +62,6 @@ class Split(object):
         self._write('note.train', 'note.tiny.train', X_train)
         self._write('icd.train', 'icd.tiny.train', y_train)
 
-        # Write a tiny 'test' file that contains a portion of the tiny train data
-        # (this will be used to test our model to make sure it is working correctly)
-        self._write('note.overfit.tiny.test', None, X_train[:10])
-        self._write('icd.overfit.tiny.test', None, y_train[:10])
-
         print("   Generated {} train entries".format(len(X_train)))
         print("   Generated {} val entries".format(len(X_val)))
         print("   Generated {} test entries".format(len(X_test)))

@@ -14,6 +14,7 @@
 \usepackage{graphicx}
 \usepackage{xcolor}
 \usepackage{lipsum}
+\DeclareMathOperator*{\argmax}{argmax} % thin space, limits underneath in displays
 
 \newcommand{\note}[1]{\textcolor{blue}{{#1}}}
 
@@ -24,7 +25,7 @@
 }
 
 \author{
-  Tom Jin \\
+  Boyang Tom Jin \\
   Department of Computer Science \\
   Stanford University \\
   \texttt{tomjin@stanford.edu} \\
@@ -46,57 +47,54 @@
 \maketitle
 
 \begin{abstract}
-	Manual ICD code assignment underpins the way the health care system tracks diagnoses and procedures but continues to be error-prone and inconsistent between coders. With the increasing adoption of electronic medical records, the interest in automating this process continues to grow. In this project, we train recent state-of-the-art Transformer-based models on clinical discharge summaries with the aim of improving the performance on the ICD-9 assignment task over existing LSTM-based methods. We find that the Reformer Transformer model achieves the best performance, with an F1 score of XXX that is XXX better than the LSTM baseline.
+	Manual ICD code assignment underpins the way the health care system tracks diagnoses and procedures but continues to be error-prone and inconsistent between trained human coders. With the increasing adoption of electronic medical records, the interest in automating this process continues to grow. In this project, we train recent state-of-the-art Transformer-based models on clinical discharge summaries with the aim of improving the performance on the ICD-9 assignment task over existing LSTM-based methods. We have so far found that the LSTM baseline achieves an F1 score of 0.326.
 \end{abstract}
 
 \section{Approach}
-\begin{itemize}
-    \item
-    		LSTM-based models are commonly used for ICD code prediction, but they suffer from a lack of parallelizability which limits the length of the input data that can be used as input. As Transformer-based models have become increasingly popular for NLP tasks, our approach primarily focused on applying the following Transformer-based models to the ICD code prediction task. \\
-    		\textbf{Vanilla Transformer}: A deep Transformer model based on the original work of Vaswani et al. was adapted to the multi-class prediction problem. At the core of the Transformer is the concept of the scaled dot-product self-attention, whereby an input sequence is attended to itself in order to discover dependencies within itself. This can be represented by  $softmax(\frac{QK^T}{\sqrt{d_k}}V)$, where $Q$, $K$, and $V$ in this case are matrices derived from a discharge summary. Note that the scaling factor here is used to prevent vanishing gradients when a large dimensionality is used.
-    		A deep Transformer architecture consists of several encoder and decoder layers, where each layer consists of a multi-head self-attention layer and a fully-connected feed-forward network. In addition, there is a residual connection around each sublayer followed by layer normalization. In our classification task, we forego the decoder layers and instead make use of a series of stacked encoder layers followed by a final linear layer and a softmax to produce an output probability for each ICD code. \\
-    		For this model, we will build a Transformer classifier using the built-in Transformer module from PyTorch. 
-    		\textbf{Reformer}: Recent Transformer research have favored the creation of large models, with over 0.5B parameters reported in the largest models. One limitation of training or even fine-tuning these large Transformer models is that the amount of computation required exceeds what can be realistically trained on a single GPU. The Reformer Transformer model suggests three areas of improvements: use of reversible layers, use of locality-sensitive hashing for self-attention, and splitting activations in the feed-forward layers. Similar to the vanilla Transformer model, we apply a linear layer and softmax after the encoder layers to create a ICD classification model. As most of the discharge summaries are over 1000 tokens in length, the Reformer model should be able to scale better than the equivalent vanilla Transformer model while achieving similar performance. \\
-    		For this model, we will use the pytorch-reformer package from Github. However, because this package only contains the base language model, we will build a separate text classification model on the base Reformer module.
-    		\textbf{BioBERT}: BioBERT is a bidirectional Transformer model that has been pre-trained on over 20B words derived from the BooksCorpus, Wikipedia, PubMed, and PMC journal articles. BioBERT is based on the original BERT model introduced by Devlin et al. which has been shown to state-of-the-art performance on a variety of NLP tasks after minimal fine-tuning [2]. Here, we aim to fine-tune BioBERT using the discharge summary data on the ICD prediction task. Like the original BERT model, BioBERT inserts a [CLS] token at the beginning of each training sample. Classification tasks are then done by passing the representation of the [CLS] token through an output layer. Furthermore, one of the innovations of a BERT language model is the use of a word tokenizer, which allows out-of-vocabulary words to be represented by word pieces rather than just being assigned to a default unknown token. This feature is especially useful in this project because misspellings and non-standard abbreviations frequently occur in the discharge summaries. \\
-    		We expect this model to have the best performance of all models as we do not have enough data to properly train our own Transformer model. For our project, we will fine-tune a  HuggingFace BERT transformer but adapt and load in the pre-trained BioBERT embeddings instead of the default BERT embeddings. 
-    		\textbf{Metadata}: While self-attention is proficient at modeling dependencies within a input sequence, it is computationally expensive because each word needs to be compared with every other word in a sequence, resulting in a $O(L^2)$ time complexity where $L$ is the length of the input sequence. In this model, we propose to replace self-attention with attention between the discharge summary and the ICD-9 code description. Specifically, the $Q$ and $K$ in $softmax(\frac{QK^T}{\sqrt{d_k}}V)$ will represent the discharge summary and ICD discharge summary respectively. \\
-    		This is beneficial to a classification problem because the label should naturally attend most closely with parts of the input sequence that the label represents. In other words, the discharge summaries can now be specifically modeled with respect to the ICD codes. Furthermore, this metadata attention scheme should also be more efficient than a standard Transformer because it has a complexity of $O(L * C * D)$, where $C$ is the number of output labels, $D$ is the length of the label descriptions, and $L >> C * D$ for discharge summaries. \\
-    		This model is original and to our knowledge has not attempted in the context of the Transformer. We will fork the existing pytorch-reformer package on Github and replace the shared QK attention with the metadata attention. 
-    		
-    \item
-    		\textbf{Baseline}: A bidirectional LSTM model is used as the baseline model, consistent with existing ICD-9 prediction attempts in literature. Each word in the input discharge summary is fed one by one into the LSTM. The output from the last hidden timestep is then used as input to a linear layer, dropout, and final softmax to calculate the probability of each ICD code. 
-    
-\end{itemize} 
-
-
+    	LSTM-based models have been commonly used for ICD code prediction, but they suffer from a lack of parallelizability which limits the length of the input data that can be used as input \cite{shi2017towards} \cite{ayyar2016tagging}. As such, driven by the recent popularity of Transformers, we eschew the LSTM-models and instead focus primarily on applying a variety of Transformer-based models to the ICD code prediction task.
+    	\begin{itemize}
+    		\item
+		    	\textbf{Baseline}: A bidirectional LSTM model is used as the baseline model. Each word in the input discharge summary is fed one-by-one into the LSTM. The hidden states last  time-step is then used as input to a fully-connected layer, dropout, and final softmax to calculate the probability of each ICD code. 
+    		\item
+			\textbf{Vanilla Transformer}: A deep Transformer model based on the original work of Vaswani et al. was adapted to the multi-class prediction problem \cite{vaswani2017attention}. At the core of the Transformer is the concept of the scaled dot-product self-attention, whereby an input sequence is attended to itself in order to discover dependencies within itself. This can be represented by  $softmax(\frac{QK^T}{\sqrt{d_k}}V)$, where $Q$, $K$, and $V$ in this case are matrices derived from a discharge summary. Note that the scaling factor here is used to prevent vanishing gradients when a large dimensionality is used.\\\\
+		    		In contrast to the traditional encoder-decoder layout of the Transformer, we only make use of a series of stacked encoder layers followed by a non-linearity, fully-connected layer, and a softmax to produce an output probability for each ICD code. \\
+		    		For this model, we adapted the built-in Transformer module from PyTorch into a text classification problem. 
+		\item
+			\textbf{Reformer}: Recent Transformer research have favored the creation of large models, with over 0.5B parameters reported in the largest models \cite{kitaev2020reformer}. One limitation is that the amount of computation required for these models exceeds what can be realistically trained on a single GPU. The Reformer Transformer model suggests three areas of improvements: use of reversible layers, use of locality-sensitive hashing for self-attention, and splitting activations in the feed-forward layers \cite{kitaev2020reformer}. \\\\
+			Similar to the vanilla Transformer model, we apply a fully-connected layer and softmax after the encoder layers to create a ICD classification model. As most of the discharge summaries are over 1000 tokens in length, the Reformer model should be able to scale better than the equivalent vanilla Transformer model while achieving similar accuracy. \\
+    			For this model, we will use the reformer-pytorch package from Github which we fork and adapt to the text classification problem \cite{reformerpytorch}. 
+    		\item
+    			\textbf{BioBERT}:	BioBERT is a bidirectional Transformer model that has been pre-trained on over 20B words derived from the BooksCorpus, Wikipedia, PubMed, and PMC journal articles \cite{lee2020biobert}. Here, we aim to fine-tune BioBERT using the discharge summary data on the ICD prediction task. Like the original BERT model, BioBERT inserts a [CLS] token at the beginning of each training sample. Classification tasks are then done by passing the representation of the [CLS] token through a fully-connected layer, non-linearity, and softmax. \\
+    		We expect this model to have the best performance of all models as we do not have enough data to properly train our own Transformer model. For our project, we will fine-tune a  HuggingFace BERT transformer but adapt and load in the pre-trained BioBERT embeddings instead of the default BERT embeddings \cite{huggingface}. 
+    		\item
+    			\textbf{Metadata}: In this model, we propose to replace self-attention with attention between the discharge summary and the ICD-9 code description. Specifically, the $Q$ and $K$ in $softmax(\frac{QK^T}{\sqrt{d_k}}V)$ will represent the discharge summary and ICD discharge summary respectively. \\\\
+    		This is beneficial to a classification problem because the label should naturally attend most closely with parts of the input sequence that the label represents. Furthermore, this metadata attention scheme should also be more efficient than a standard Transformer because it has a complexity of $O(L * C * D)$, where $C$ is the number of output labels, $D$ is the length of the label descriptions, and $L >> C * D$ for discharge summaries. \\\\
+    		This model is original and to our knowledge has not attempted in the context of the Transformer. We will fork the existing reformer-pytorch package on Github and replace the shared QK attention with the metadata attention. \\\\
+    	\end{itemize}
+    	
 \section{Experiments}
 \begin{itemize}
     \item 
     		\textbf{Data}: 
-    		We used the MIMIC-III dataset, a restricted-access electronic medical record dataset of over 40,000 patients who stayed in the Beth Israel Deaconess Medical Center between 2001 and 2012 \cite{johnson2016mimic}. For the purposes of this study, we specifically extracted the discharge summaries and the ICD-9 diagnosis codes and code descriptions for each patient stay. Although multiple ICD-9 codes are usually assigned for a patient stay, some ICD-9 codes may reflect pre-existing health conditions for a patient that are not expressed in the discharge summary. As such, only the top ICD-9 code was kept for each patient. The data was further filtered to include only the top 50 ICD-9 codes which resulted in 58,111 total samples. This data was split 0.64/0.16/0.20 into training, validation, and test sets.\\
+    		We used the MIMIC-III dataset, a restricted-access electronic medical record dataset of over 40,000 patients who stayed in the Beth Israel Deaconess Medical Center between 2001 and 2012 \cite{johnson2016mimic}. For the purposes of this study, we specifically extracted the discharge summaries and the top ICD-9 diagnosis codes and code descriptions for each patient stay. The data was further filtered to include only the top 50 ICD-9 codes which resulted in 58,111 total samples. This data was split 0.64/0.16/0.20 into training, validation, and test sets.\\
     		Because the discharge summaries were in an HIPAA-compliant form-like format, additional pre-processing steps were taken to reshape into a sequence of sentences, remove all numbers and name-placeholders, and convert to lowercase. Each discharge summary was also padded or truncated according to a tunable target length parameter before being tokenized according to a vocabulary built from the training data. These steps form the basis of our multi-class classification problem.
     \item 
-    		\textbf{Evaluation method}: The top ICD-9 code prediction was picked after applying a standard softmax function to the output states of the model:
+    		\textbf{Evaluation method}: The ICD-9 prediction was picked based on the index of the max value after applying a standard softmax function to the output states of the model:
     		\begin{align*}
-			\frac{exp(x_i)}{\sum_{n=1}^{L}{exp(x_n)}} \text{  where L is the number of ICD-9 codes}
+			\argmax_{i}{(\frac{exp(x_i)}{\sum_{n=1}^{L}{exp(x_n)}})} \text{  where }L\text{ is the number of unique ICD-9 codes}
     		\end{align*}
     		With the validation or test sets, the top ICD-9 codes were evaluated against the reference using the micro-F1 measure, precision, recall, and accuracy. Note that during training, the reference ICD-9 codes were treated as a one-hot encoded vector and evaluated against the output of the softmax using the cross-entropy loss, averaged across samples. 
     		 
-    \item \textbf{Experimental details}: Because the discharge summaries are on average approximately 1024 words in length, discharge summaries were truncated to this length for the baseline model and the Reformer model, with the option of tuning this parameter in future experiments. The batch size was chosen to be 32 during training and 128 during testing. A discharge word embedding size of 256 was used between all models evaluated. For the Reformer model, we used six encoder layers to remain consistent with the architecture of the original Transformer paper. We also used four rounds of LSH hashing as this was found to have 99.9\% accuracy relative to full attention in the Reformer paper. Similar to the experiments done in the Reformer paper, we kept the number of multi-attention heads to be eight.  
-    \item \textbf{Results}: 
-    So far, we have been able to create the baseline model and adapt the Reformer model to run our text classification problem. The baseline model achieved an F1 score of XX and accuracy of XX on the test dataset with a standardized input length of 1000 tokens. These low numbers were not surprising as the baseline model did not incorporate any attention scheme which meant that long-term dependencies within an input sequence may not be utilized fully. However, this does not motivate the need for the Transformer model. The Reformer model achieved a better F1 score of XX and accuracy of XX on the test dataset, using 1024 input tokens. This improvement was surprising given that we did not use any pre-existing word embeddings or pre-trained language model, although this is partly explained by how the classification task is easier than say a seq2seq translation model. In any case, this shows the importance of having attention to concentrate on the relevant parts of the input sequence.
+    \item \textbf{Experimental details}: Because the discharge summaries are on average approximately 1024 words in length, discharge summaries were truncated to this length for the baseline, Transformer, and Reformer models, with the option of tuning this parameter in future experiments. The batch size was chosen to be 32 during training and 128 during testing. A discharge word embedding size of 256 was used between all models evaluated. For the Transformer and Reformer models, we used six encoder layers to remain consistent with the architecture of the original Transformer paper. We also used four rounds of LSH hashing for the Reformer, as this was found to have 99.9\% accuracy relative to full attention in the Reformer paper \cite{kitaev2020reformer}. In addition, we used eight multi-attention heads for the Transformer-based models.  
+    \item \textbf{Results}: So far, we have been able to create the baseline, vanilla Transformer, and the Reformer classifier models, where the last two are still undergoing fine-tuning. The baseline model achieved an F1 score of 0.326 on the test dataset with a standardized input length of 1024 tokens. These relatively low numbers were not surprising as the baseline model did not incorporate any attention scheme which meant that long-term dependencies within an input sequence may not be utilized fully. \\
+    The Transformer model is currently being tuned as it could not be trained without running out of memory on an input length of 1024 tokens. On an input length of 256 tokens, the Transformer achieved a poor F1 score of 0.073. This was not surprising given that the first 256 tokens of discharge summary are not usually relevant to the patient diagnosis. One option to overcome the limitation in number of tokens is to pick a contiguous sequence of tokens from the middle of the diagnosis rather than the beginning. That said, Reformer model is able to run with longer sequence lengths, but the results are still pending. 
 \end{itemize}
 
-
 \section{Future work}
-	Moving forward, we will continue to fine-tune the existing vanilla Transformer and Reformer models by tuning the input and model parameters (eg. by varying the target lengths, we can compare the models in terms of training time, model size, and accuracy). We will continue to build out the BERT model and evaluate its performance in comparison with the Transformer and Reformer models. Finally, we will adapt the Reformer model to incorporate the metadata-attention as described in section XX to note any improvements. 
+	Moving forward, we will continue to fine-tune the existing vanilla Transformer and Reformer models by tuning the input and model parameters (eg. by varying the target lengths, we can compare the models in terms of training time, model size, and accuracy). We will continue to build out the BERT model and evaluate its performance in comparison with the Transformer and Reformer models. Finally, we will fork the Reformer model to incorporate the metadata attention scheme as described in section 1 to note any improvements over the other Transformer-based models. 
 
 
 \bibliographystyle{unsrt}
 \bibliography{references}
-
-[1] https://www.degruyter.com/downloadpdf/j/pralin.2018.110.issue-1/pralin-2018-0002/pralin-2018-0002.pdf
-[2] https://arxiv.org/pdf/1810.04805.pdf
 
 \end{document}
