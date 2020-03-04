@@ -84,16 +84,17 @@ class ReformerClassifier(nn.Module):
         self.classifier = nn.Linear(dim, self.num_output_classes)
         self.dropout = nn.Dropout(0.3)
 
-    def forward(self, x, **kwargs):
+    def forward(self, x, source_lengths, **kwargs):
         t = torch.arange(x.shape[1], device=x.device)
         x = self.token_emb(x)
-        x = x + self.pos_emb(t).type(x.type())
+        # x = x + self.pos_emb(t).type(x.type())
 
-        x = self.to_model_dim(x)
+        # x = self.to_model_dim(x)
         hidden_state = self.reformer(x, **kwargs)  # (bs, seq length, dim)
         pooled_output = hidden_state[:, 0, :]  # (bs, dim) - we take the first character (the CLS token)
         pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
-        pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)
+        # pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)
+        pooled_output = nn.Tanh()(pooled_output)  # (bs, dim)
         pooled_output = self.dropout(pooled_output)  # (bs, dim)
         logits = self.classifier(pooled_output)  # (bs, dim)
 

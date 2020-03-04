@@ -30,7 +30,7 @@ Options:
     --max-num-trial=<int>                   terminate training after how many trials [default: 5]
     --lr-decay=<float>                      learning rate decay [default: 0.5]
     --lr=<float>                            learning rate [default: 0.001]
-    --uniform-init=<float>                  uniformly initialize all parameters [default: 0.1]
+    --uniform-init=<float>                  uniformly initialize all parameters [default: 0.5]
     --save-to=<file>                        model save path [default: model.bin]
     --valid-niter=<int>                     perform validation after how many iterations [default: 100]
     --dropout=<float>                       dropout [default: 0.5]
@@ -49,6 +49,8 @@ from docopt import docopt
 import numpy as np
 from typing import List, Tuple, Dict, Set, Union
 from tqdm import tqdm
+
+from linear.linear import TextSentiment
 from lstm_baseline.lstm import DischargeLSTM
 from reformer.reformer_classifier import ReformerClassifier
 from utils import batch_iter, read_source_text, read_icd_codes
@@ -149,10 +151,10 @@ def train(args: Dict):
     vocab = Vocab.load(args['--vocab'])
     use_cls = args['--model'] != "baseline"
 
-    train_source_text, train_source_lengths = read_source_text(args['--train-src'], target_length=int(args['--target-length']), pad_token=vocab.discharge.pad_token, use_cls=use_cls)
+    train_source_text, train_source_lengths = read_source_text(args['--train-src'], target_length=int(args['--target-length']), use_cls=use_cls)
     train_icd_codes = read_icd_codes(args['--train-icd'])
 
-    dev_source_text, dev_source_lengths = read_source_text(args['--dev-src'], target_length=int(args['--target-length']), pad_token=vocab.discharge.pad_token, use_cls=use_cls)
+    dev_source_text, dev_source_lengths = read_source_text(args['--dev-src'], target_length=int(args['--target-length']), use_cls=use_cls)
     dev_icd_codes = read_icd_codes(args['--dev-icd'])
 
     train_data = list(zip(train_source_text, train_source_lengths, train_icd_codes))
@@ -171,6 +173,11 @@ def train(args: Dict):
                               embed_size=int(args['--word-embed-size']),
                               hidden_size=int(args['--hidden-size']),
                               dropout_rate=float(args['--dropout']))
+    elif model_type == "linear":
+        model = TextSentiment(vocab=vocab,
+                              num_embeddings=int(args['--target-length']),
+                              embed_dim=int(args['--word-embed-size']),
+                              num_class=50)
     elif model_type == "reformer":
         model = ReformerClassifier(
             vocab=vocab,
@@ -204,11 +211,11 @@ def train(args: Dict):
 
     model.train()
 
-    # uniform_init = float(args['--uniform-init'])
-    # if np.abs(uniform_init) > 0.:
-    #     print('uniformly initialize parameters [-%f, +%f]' % (uniform_init, uniform_init), file=sys.stderr)
-    #     for p in model.parameters():
-    #         p.data.uniform_(-uniform_init, uniform_init)
+    uniform_init = float(args['--uniform-init'])
+    if np.abs(uniform_init) > 0.:
+        print('uniformly initialize parameters [-%f, +%f]' % (uniform_init, uniform_init), file=sys.stderr)
+        for p in model.parameters():
+            p.data.uniform_(-uniform_init, uniform_init)
 
     device = torch.device("cuda:0" if args['--cuda'] else "cpu")
     print('Using device: %s' % device, file=sys.stderr)
