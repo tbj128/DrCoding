@@ -83,7 +83,7 @@ logger.info('Starting run.py')
 
 ################################################################################
 
-def evaluate_scores(references: List[str], predicted: List[str]):
+def evaluate_scores(references: List[List[str]], predicted: List[List[str]]):
     """
     Given set of references and predicted ICD codes, return the precision, recall, f1, and accuracy statistics
     """

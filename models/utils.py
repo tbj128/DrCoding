@@ -13,11 +13,8 @@ import math
 from typing import List
 
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import nltk
-nltk.download('punkt')
+# import nltk
+# nltk.download('punkt')
 
 
 def read_source_text(file_path, target_length=1000, pad_token='<pad>', use_cls=False):
@@ -33,7 +30,6 @@ def read_source_text(file_path, target_length=1000, pad_token='<pad>', use_cls=F
     with open(file_path) as f:
         for line in f:
             # sent = nltk.word_tokenize(line)
-            # sent = line.split(" ")[10:] # Skip first 10 words because it's filled with templating
             sent = line.split(" ")
             if use_cls:
                 sent = ['<cls>'] + sent
@@ -51,7 +47,7 @@ def read_source_text(file_path, target_length=1000, pad_token='<pad>', use_cls=F
 
 def read_icd_codes(file_path):
     """
-    Read the ICD codes into a one-hot like vector
+    Read the list of ICD codes into a one-hot like vector
     @param file_path (str): path to file containing ICD codes
     """
     icds = []

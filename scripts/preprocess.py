@@ -12,6 +12,7 @@ Options:
     --icdmap=<file>                         path to the D_ICD_DIAGNOSES.csv containing description of ICD-9 codes
     --icd=<file>                            path to the DIAGNOSES_ICD.csv containing ICD-9 codes for each patient stay
     --notes=<file>                          path to the NOTEEVENTS.csv containing the clinical notes
+    --output=<file>                         output directory
     --sample                                if set, looks at only one discharge summary from the clinical notes
     --top-k=<int>                           filter overall data to keep patients with an ICD code within the top k most frequently occurring ICD codes [default: 50]
     --top-k-per-patient=<int>               the number of ICD codes kept for each patient. eg. value of 1 means to produce the most relevant ICD code for each patient. -1 means that all ICD codes are kept. [default: -1]
@@ -22,10 +23,11 @@ import csv
 import re
 
 class Preprocess():
-    def __init__(self, icdmap, icd, notes, take_sample, top_k, top_k_per_patient):
+    def __init__(self, icdmap, icd, notes, output, take_sample, top_k, top_k_per_patient):
         self.f_icdmap = icdmap
         self.f_icd = icd
         self.f_notes = notes
+        self.f_output = output
         self.take_sample = take_sample
         self.top_k = top_k
         self.top_k_per_patient = top_k_per_patient
@@ -160,7 +162,7 @@ class Preprocess():
                 category = line[6]
                 if category == "Discharge summary":
                     self.hadmid_with_discharge.add(hadmid)
-                    if self.take_sample:
+                    if self.take_sample and num_notes > 100:
                         break
                 if num_notes % 500 == 0:
                     print("   > Processed {} lines so far".format(num_notes), end='\r', flush=True)
@@ -174,66 +176,82 @@ class Preprocess():
         print("> Extracting and converting the discharge summaries...")
         i = 0
         num_discharge_summaries = 0
+
+        hadmid_to_note = {}
         with open(self.f_notes, "r") as f:
             reader = csv.reader(f, delimiter=",")
             next(reader, None) # Skip headers
-            with open(self.f_notes + ".txt", "w") as fw:
-                with open(self.f_icd + ".top-" + (str(self.top_k_per_patient) if self.top_k_per_patient >= 0 else "all") + ".txt", "w") as icd_fw:
-                    icd_writer = csv.writer(icd_fw, delimiter=",")
-                    with open(self.f_icd + ".top-" + (str(self.top_k_per_patient) if self.top_k_per_patient >= 0 else "all") + ".desc.txt", "w") as icd_desc_fw:
-                        icd_desc_writer = csv.writer(icd_desc_fw, delimiter=",")
 
-                        # Pattern to remove all occurrences of [** name **], which are placeholders for names (HIPAA regulations)
-                        # TODO: Consider using this if the next pattern is too strict
-                        hipaa_regex = re.compile(r"\[\*\*.*?\*\*\]", re.IGNORECASE)
+            # Pattern to remove all occurrences of [** name **], which are placeholders for names (HIPAA regulations)
+            hipaa_regex = re.compile(r"\[\*\*.*?\*\*\]", re.IGNORECASE)
 
-                        # Pattern to keep only alpha characters, some punctuation, and whitespace
-                        # This has the benefit of removing the hidden ICD-9 codes in some summaries
-                        regex = re.compile(r"[^a-zA-Z ,\.]+", re.IGNORECASE)
+            # Pattern to keep only alpha characters, some punctuation, and whitespace
+            # This has the benefit of removing the hidden ICD-9 codes in some summaries
+            regex = re.compile(r"[^a-zA-Z \-,\.]+", re.IGNORECASE)
 
-                        for line in reader:
-                            hadmid = line[2]
-                            category = line[6]
-                            text = line[10]
-                            if category == "Discharge summary" and hadmid in self.hadmid_to_icds and len(self.hadmid_to_icds[hadmid]) >= self.top_k_per_patient:
+            phrases_to_remove = ['admission date', 'discharge date', 'date of birth', 'service',
+                                 'chief complaint', 'history of present illness',
+                                 'past medical history', 'admission diagnosis',
+                                 'history of the present illness', 'attending', 'cc', 'dictated by medquist job']
+            useless_words = re.compile(r"|".join(phrases_to_remove))
 
-                                known_icds = []
-                                for icd, seq in self.hadmid_to_icds[hadmid].items():
-                                    known_icds.append({
-                                        "icd": icd,
-                                        "seq": seq
-                                    })
-                                known_icds = sorted(known_icds, key=lambda k: k['seq'])
-                                known_icds = list(map(lambda x: x["icd"], known_icds))
-                                if self.top_k_per_patient == -1:
-                                    patient_icds = known_icds
-                                else:
-                                    patient_icds = known_icds[:self.top_k_per_patient]
+            num_duplicates = 0
+            for line in reader:
+                hadmid = line[2]
+                category = line[6]
+                text = line[10]
+                if category == "Discharge summary" and hadmid in self.hadmid_to_icds and len(
+                        self.hadmid_to_icds[hadmid]) >= self.top_k_per_patient:
+                    text = text.lower().replace("\n", " ")  # Convert to lower case and make one line
+                    text = re.sub('/', ' ', text)  # Split slashes into two words
+                    text = hipaa_regex.sub("", text)  # Remove name placeholders
+                    text = regex.sub("", text)  # Remove punctuation, numbers, etc.
+                    text = ' '.join([w for w in text.split() if len(w) > 1])  # Remove single letters
+                    text = useless_words.sub("", text)
+                    if hadmid in hadmid_to_note:
+                        hadmid_to_note[hadmid] += " " + text
+                        num_duplicates += 1
+                    else:
+                        hadmid_to_note[hadmid] = text
 
-                                icd_writer.writerow(patient_icds)
-                                desc_row = []
-                                for icd in patient_icds:
-                                    if icd in self.condensed_icd_to_desc:
-                                        desc_row.append(self.condensed_icd_to_desc[icd])
-                                    else:
-                                        desc_row.append("unk")
-                                icd_desc_writer.writerow(desc_row)
+                    num_discharge_summaries += 1
 
-                                text = text.lower().replace("\n", " ")  # Convert to lower case and make one line
-                                text = re.sub('/', ' ', text)  # Split slashes into two words
-                                text = hipaa_regex.sub("", text)  # Remove name placeholders
-                                text = regex.sub("", text)  # Remove punctuation, numbers, etc.
-                                text = ' '.join([w for w in text.split() if len(w) > 1])  # Remove single letters
-                                fw.write(text + "\n")
+                    if self.take_sample and num_discharge_summaries > 100:
+                        break
+                if i % 5000 == 0:
+                    print("   > Processed {} lines so far".format(i), end='\r', flush=True)
+                i += 1
 
-                                num_discharge_summaries += 1
+        print("Duplicates found and merged {}".format(num_duplicates))
 
-                                if self.take_sample:
-                                    print(text)
-                                    break
-                            if i % 5000 == 0:
-                                print("   > Processed {} lines so far".format(i), end='\r', flush=True)
-                            i += 1
+        with open(self.f_output + "/notes.processed.txt", "w") as fw:
+            notes_writer = csv.writer(fw, delimiter="\t")
+            with open(self.f_output + "/icd.processed.txt", "w") as icd_fw:
+                icd_writer = csv.writer(icd_fw, delimiter="\t")
+                with open(self.f_output + "/icd-desc.processed.txt", "w") as icd_desc_fw:
+                    icd_desc_writer = csv.writer(icd_desc_fw, delimiter="\t")
+
+                    for hadmid, text in hadmid_to_note.items():
+                        known_icds = []
+                        for icd, seq in self.hadmid_to_icds[hadmid].items():
+                            known_icds.append({
+                                "icd": icd,
+                                "seq": seq
+                            })
+                        known_icds = sorted(known_icds, key=lambda k: k['seq'])
+                        known_icds = list(map(lambda x: x["icd"], known_icds))
+                        if self.top_k_per_patient == -1:
+                            patient_icds = known_icds
+                        else:
+                            patient_icds = known_icds[:self.top_k_per_patient]
+
+                        icd_writer.writerow([hadmid] + patient_icds)
+                        desc_row = [hadmid]
+                        for icd in patient_icds:
+                            desc_row.append(self.condensed_icd_to_desc[icd])
+                        icd_desc_writer.writerow(desc_row)
+
+                        notes_writer.writerow([hadmid, text])
         print("> Finished extracting discharge summaries")
         print("> Number of discharge summaries = {}".format(num_discharge_summaries))
 
@@ -243,7 +261,7 @@ def main():
     Entry point of tool.
     """
     args = docopt(__doc__)
-    pp = Preprocess(args["--icdmap"], args["--icd"], args["--notes"], args["--sample"], int(args["--top-k"]), int(args["--top-k-per-patient"]))
+    pp = Preprocess(args["--icdmap"], args["--icd"], args["--notes"], args["--output"], args["--sample"], int(args["--top-k"]), int(args["--top-k-per-patient"]))
     pp.get_icd_map()
     pp.extract_hadmids_with_discharge_summaries()
     pp.extract_top_icd_codes()

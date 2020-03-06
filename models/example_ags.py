@@ -188,6 +188,9 @@ def train_func(sub_train_):
         output = model(text, offsets)
         loss = criterion(output, cls)
         train_loss += loss.item()
+
+        print('\tIter: {} | Loss: {}(train)'.format(i, loss.item()))
+
         loss.backward()
         optimizer.step()
         train_acc += (output.argmax(1) == cls).sum().item()
