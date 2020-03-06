@@ -12,7 +12,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset
 from vocab import Vocab
-from utils import read_source_text, read_icd_codes
+from utils import read_source_text
 
 # instantiate model
 

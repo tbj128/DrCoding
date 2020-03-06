@@ -4,7 +4,7 @@
 """
 
 Usage:
-    baseline.py train --train-src=<file> --train-icd=<file> --dev-src=<file> --dev-icd=<file> --vocab=<file> [options]
+    baseline.py train --train-src=<file> --dev-src=<file> --vocab=<file> [options]
     baseline.py predict [options] MODEL_PATH TEST_SOURCE_FILE OUTPUT_FILE
     baseline.py predict [options] MODEL_PATH TEST_SOURCE_FILE TEST_TARGET_FILE OUTPUT_FILE
 
@@ -12,10 +12,9 @@ Options:
     -h --help                               show this screen.
     --cuda                                  use GPU
     --model=<str>                           the type of model to train [default: baseline]
+    --glove-path=<file>                     the glove embedding file [default: ""]
     --train-src=<file>                      train source file
-    --train-icd=<file>                      train ICD codes file
     --dev-src=<file>                        dev source file
-    --dev-icd=<file>                        dev ICD codes file
     --vocab=<file>                          vocab file
     --target-length=<int>                   max length of each input sequence [default: 1000]
     --seed=<int>                            seed [default: 0]
@@ -53,7 +52,7 @@ from tqdm import tqdm
 from linear.linear import TextSentiment
 from lstm_baseline.lstm import DischargeLSTM
 from reformer.reformer_classifier import ReformerClassifier
-from utils import batch_iter, read_source_text, read_icd_codes
+from utils import batch_iter, read_source_text
 
 import torch
 import torch.nn as nn
@@ -89,14 +88,20 @@ def evaluate_scores(references: List[List[str]], predicted: List[List[str]]):
     """
     assert len(references) == len(predicted)
 
-    f1 = f1_score(references, predicted, average="micro")
-    precision = precision_score(references, predicted, average="micro")
-    recall = recall_score(references, predicted, average="micro")
-    accuracy = accuracy_score(references, predicted)
+    f1 = 0.
+    precision = 0.
+    recall = 0.
+    accuracy = 0.
+    for i in range(len(references)):
+        f1 += f1_score(references[i], predicted[i])
+        precision += precision_score(references[i], predicted[i])
+        recall += recall_score(references[i], predicted[i])
+        accuracy += accuracy_score(references[i], predicted[i])
 
-    return precision, recall, f1, accuracy
+    return precision / len(references), recall / len(references), f1 / len(references), accuracy / len(references)
 
-def predict_output(args, model, dev_data, device, batch_size=32, is_test=False):
+
+def predict_output(args, model, dev_data, device,  thresh: float = 0.3, batch_size=32, is_test=False):
     preds = []
     icds = []
     completed = 0
@@ -106,18 +111,27 @@ def predict_output(args, model, dev_data, device, batch_size=32, is_test=False):
             batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)
 
             model_out = model(batch_src_text_tensor, batch_src_lengths)
-            top_prediction_indices = torch.argmax(F.softmax(model_out, dim=1), dim=1)  # bs x 1
+            # top_prediction_indices = torch.argmax(F.softmax(model_out, dim=1), dim=1)  # bs x 1
+            output_scores = F.softmax(model_out, dim=1)  # bs x classes
 
-            for ind in top_prediction_indices.cpu().tolist():
-                top_output_icd = model.vocab.icd.get_icd(ind)
-                preds.append(top_output_icd)
-            for actual_icd in actual_icds:
-                icds.append(actual_icd)
+            for output_score_arr in output_scores.cpu().tolist():
+                one_hot = []
+                for score in output_score_arr:
+                    one_hot.append(1 if score >= thresh else 0)
+                preds.append(one_hot)
+            for actual_icd_one_hot in actual_icds:
+                icds.append(list(actual_icd_one_hot))
 
             completed += len(src_text)
             if is_test:
                 print("   > Completed {}/{}".format(completed, len(dev_data)), end='\r', flush=True)
+
+    y_pred = torch.tensor(preds)
+    y_true = torch.tensor(icds)
+    print("Accuracy {}".format(np.mean(((y_pred>thresh)==y_true.byte()).float().cpu().numpy(), axis=1).sum()))
+
     return preds, icds
+
 
 def evaluate_model_with_dev(args, model, dev_data, device, batch_size=32):
     """
@@ -151,11 +165,9 @@ def train(args: Dict):
     vocab = Vocab.load(args['--vocab'])
     use_cls = args['--model'] != "baseline"
 
-    train_source_text, train_source_lengths = read_source_text(args['--train-src'], target_length=int(args['--target-length']), use_cls=use_cls)
-    train_icd_codes = read_icd_codes(args['--train-icd'])
+    train_source_text, train_source_lengths, train_icd_codes = read_source_text(args['--train-src'], target_length=int(args['--target-length']), use_cls=use_cls)
 
-    dev_source_text, dev_source_lengths = read_source_text(args['--dev-src'], target_length=int(args['--target-length']), use_cls=use_cls)
-    dev_icd_codes = read_icd_codes(args['--dev-icd'])
+    dev_source_text, dev_source_lengths, dev_icd_codes = read_source_text(args['--dev-src'], target_length=int(args['--target-length']), use_cls=use_cls)
 
     train_data = list(zip(train_source_text, train_source_lengths, train_icd_codes))
     dev_data = list(zip(dev_source_text, dev_source_lengths, dev_icd_codes))
@@ -166,18 +178,16 @@ def train(args: Dict):
     valid_niter = int(args['--valid-niter'])
     log_every = int(args['--log-every'])
     model_save_path = args['--save-to']
+    device = torch.device("cuda:0" if args['--cuda'] else "cpu")
 
     model_type = args['--model']
     if model_type == "baseline":
         model = DischargeLSTM(vocab=vocab,
                               embed_size=int(args['--word-embed-size']),
                               hidden_size=int(args['--hidden-size']),
-                              dropout_rate=float(args['--dropout']))
-    elif model_type == "linear":
-        model = TextSentiment(vocab=vocab,
-                              num_embeddings=int(args['--target-length']),
-                              embed_dim=int(args['--word-embed-size']),
-                              num_class=50)
+                              dropout_rate=float(args['--dropout']),
+                              glove_path=args['--glove-path'],
+                              device=device)
     elif model_type == "reformer":
         model = ReformerClassifier(
             vocab=vocab,
@@ -217,13 +227,11 @@ def train(args: Dict):
         for p in model.parameters():
             p.data.uniform_(-uniform_init, uniform_init)
 
-    device = torch.device("cuda:0" if args['--cuda'] else "cpu")
     print('Using device: %s' % device, file=sys.stderr)
 
     model = model.to(device)
 
-    # lossFunc = nn.BCEWithLogitsLoss(reduction='sum') # Use BCEWithLogitsLoss for multi-label prediction
-    lossFunc = nn.CrossEntropyLoss(reduction='sum') # Use CrossEntropyLoss for multi-label prediction
+    lossFunc = nn.BCEWithLogitsLoss(reduction='sum') # Use BCEWithLogitsLoss for multi-label prediction
     optimizer = torch.optim.Adam(model.parameters(), lr=float(args['--lr']))
 
     num_trial = 0
@@ -238,7 +246,7 @@ def train(args: Dict):
     while True:
         epoch += 1
 
-        for batch_src_text, batch_src_lengths, batch_icd_codes in batch_iter(train_data, batch_size=train_batch_size, shuffle=True):
+        for batch_src_text, batch_src_lengths, batch_icd_codes in batch_iter(train_data, batch_size=train_batch_size, shuffle=False):
             train_iter += 1
 
             optimizer.zero_grad()
@@ -248,10 +256,7 @@ def train(args: Dict):
             orig_train_batch = zip(batch_src_text, batch_src_lengths, batch_icd_codes)
             batch_src_text_tensor = model.vocab.discharge.to_input_tensor(batch_src_text, device)
             batch_src_lengths = torch.tensor(batch_src_lengths, dtype=torch.long, device=device)
-            batch_icd_codes = model.vocab.icd.to_tensor(batch_icd_codes, device) # use to_one_hot if doing multi-label
-
-            if args['--verbose']:
-                print("  > epoch {} iter {} batch_src_text {}".format(epoch, train_iter, batch_src_text_tensor.shape))
+            batch_icd_codes = torch.tensor(batch_icd_codes, dtype=torch.float, device=device)
 
             model_output = model(batch_src_text_tensor, batch_src_lengths)
             example_losses = lossFunc(model_output, batch_icd_codes)

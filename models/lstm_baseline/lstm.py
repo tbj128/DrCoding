@@ -10,10 +10,13 @@ from typing import List
 import torch
 import torch.nn as nn
 import torch.nn.functional as f
+import numpy as np
+
+from utils import create_embedding_from_glove
 
 
 class DischargeLSTM(nn.Module):
-    def __init__(self, vocab, hidden_size, dropout_rate, embed_size, pretrained_embeddings=None):
+    def __init__(self, vocab, hidden_size, dropout_rate, embed_size, device, glove_path=None):
         """
 
         Bidrectional LSTM Multi-Label Classifier with Glove embeddings
@@ -22,31 +25,27 @@ class DischargeLSTM(nn.Module):
         :param dropout_rate:
         :param num_output_classes:
         :param embed_size:
-        :param pretrained_embeddings:
+        :param glove_path:
         """
 
         super(DischargeLSTM, self).__init__()
 
-        self.pretrained_embeddings = pretrained_embeddings
+        self.glove_path = glove_path
         self.vocab = vocab
         self.num_output_classes = len(self.vocab.icd)
         self.hidden_size = hidden_size
         self.dropout_rate = dropout_rate
         self.embed_size = embed_size
 
-        if pretrained_embeddings is not None:
-            weights_matrix = np.zeros((len(self.vocab.discharge), pretrained_embeddings.embed_size))
-            self.embed_size = pretrained_embeddings.embed_size
-            for w in self.vocab.discharge:
-                weights_matrix[i] = glove[w]
-            self.embeddings = nn.Embedding(len(self.vocab.discharge), embed_size, padding_idx=self.vocab.discharge.pad_token)
-            self.embeddings.load_state_dict({'weight': weights_matrix})
-            self.embeddings.weight.requires_grad = False
+        if glove_path is not None and glove_path != "":
+            emb_layer, num_embeddings, embedding_dim = create_embedding_from_glove(glove_path, self.vocab, device)
+            self.embeddings = emb_layer
+            self.embed_size = embedding_dim
         else:
             self.embed_size = embed_size
             self.embeddings = nn.Embedding(len(self.vocab.discharge), embed_size, padding_idx=self.vocab.discharge.pad_token)
-        self.lstm = nn.LSTM(input_size=embed_size, hidden_size=hidden_size, bidirectional=True, bias=True)
-        self.linear = nn.Linear(embed_size * 2, self.num_output_classes, bias=False)
+        self.lstm = nn.LSTM(input_size=self.embed_size, hidden_size=hidden_size, bidirectional=True, bias=True)
+        self.linear = nn.Linear(embed_size * 2, self.num_output_classes, bias=True)
         self.dropout = nn.Dropout(dropout_rate)
 
     def forward(self, discharge_padded, source_lengths):
@@ -62,8 +61,8 @@ class DischargeLSTM(nn.Module):
         final_hidden, final_cell = hidden_and_cell # (2, batch_size, embed_size)
         final_hidden = final_hidden.permute(1, 0, 2).contiguous() # (batch_size, 2, embed_size)
         final_hidden = final_hidden.view(final_hidden.shape[0], -1) # (batch_size, 2 * embed_size)
-        lstm_out = self.linear(final_hidden)
-        lstm_out = self.dropout(lstm_out) # batch_size x num_output_classes
+        final_hidden = self.dropout(final_hidden)
+        lstm_out = self.linear(final_hidden) # batch_size x num_output_classes
         return lstm_out
 
     @staticmethod

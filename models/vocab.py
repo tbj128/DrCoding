@@ -20,13 +20,11 @@ Options:
 
 """
 
-from collections import Counter
 from docopt import docopt
-from itertools import chain
 import json
 import torch
 from typing import List
-from utils import read_source_text, read_icd_codes
+from utils import read_source_text
 
 
 class ICDVocab(object):
@@ -289,14 +287,17 @@ def main():
 
     print('read in source sentences: %s' % args['--train-src'])
 
-    src_sents, src_lengths = read_source_text(args['--train-src'])
+    src_sents, src_lengths, src_icds = read_source_text(args['--train-src'])
 
     print('generating vocabulary... ')
     discharge_vocab = DischargeVocab.from_source_text(src_sents, int(args['--size']), int(args['--freq-cutoff']))
     print('generated vocabulary, source %d words' % (len(discharge_vocab)))
 
-    src_icds = read_icd_codes(args['--train-icd'])
-    icd_vocab = ICDVocab.from_source(src_icds)
+    icds = []
+    with open(args['--train-icd'], 'r') as f:
+        for row in f:
+            icds.append(row)
+    icd_vocab = ICDVocab.from_source(icds)
     print('ICD vocab size is %d' % (len(icd_vocab)))
 
     full_vocab = {
