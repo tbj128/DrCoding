@@ -307,7 +307,7 @@ def train(args: Dict):
 
             # perform validation
             if train_iter % valid_niter == 0 or epoch == int(args['--max-epoch']):
-                precision, recall, f1, accuracy = evaluate_model_with_dev(args, model, dev_data, device, batch_size=128)   # dev batch size can be a bit larger
+                precision, recall, f1, accuracy = evaluate_model_with_dev(args, model, dev_data, device, batch_size=int(args["--batch-size"]))   # dev batch size can be a bit larger
                 valid_metric = f1
 
                 print('VALIDATION: {} | Precision {}, recall {}, f1 {}, accuracy: {}'.format(train_iter, precision, recall, f1, accuracy), file=sys.stderr)
