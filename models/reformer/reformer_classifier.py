@@ -1,6 +1,6 @@
 import sys
 
-from reformer.reformer_pytorch import Reformer, FixedPositionEmbedding
+from reformer.reformer_pytorch import Reformer
 
 import random
 import tqdm
@@ -75,7 +75,7 @@ class ReformerClassifier(nn.Module):
         num_tokens = len(vocab.discharge) # Number of tokens in the discharge note vocabulary
         self.token_emb = nn.Embedding(num_tokens, emb_dim)
         self.num_output_classes = len(self.vocab.icd)
-        self.pos_emb = FixedPositionEmbedding(emb_dim) if fixed_position_emb else nn.Embedding(max_seq_len, emb_dim)
+        self.pos_emb = nn.Embedding(max_seq_len, emb_dim)
         self.to_model_dim = identity if emb_dim == dim else nn.Linear(emb_dim, dim)
 
         self.reformer = Reformer(dim, depth, max_seq_len, heads = num_heads, bucket_size = bucket_size, n_hashes = n_hashes, ff_chunks = ff_chunks, attn_chunks = attn_chunks, causal = causal, weight_tie = weight_tie, lsh_dropout = lsh_dropout, layer_dropout = layer_dropout, random_rotations_per_head = random_rotations_per_head, twin_attention = twin_attention, use_scale_norm = use_scale_norm, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, num_mem_kv = num_mem_kv)
