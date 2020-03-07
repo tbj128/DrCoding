@@ -2,7 +2,7 @@ import math
 from torch import nn
 import torch.nn.functional as F
 
-from reformer.reformer_pytorch import Reformer, ReformerLM, LSHSelfAttention
+from reformer import Reformer, ReformerLM, LSHSelfAttention
 
 def pad_to_multiple(tensor, seqlen, multiple, dim=-1):
     m = seqlen / multiple

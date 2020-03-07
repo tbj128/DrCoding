@@ -15,6 +15,7 @@
 *.gz
 *.pdf
 
+
 # Data files are protected and should be downloaded from the MIMIC-III website
 data
 data_split

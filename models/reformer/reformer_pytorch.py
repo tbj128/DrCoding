@@ -3,8 +3,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Function
-from functools import partial
+from functools import partial, reduce
 from itertools import chain
+from operator import mul
 from reformer.reversible import ReversibleBlock, ReversibleSequence
 
 #constants
@@ -25,10 +26,14 @@ def batched_index_select(values, indices):
     last_dim = values.shape[-1]
     return values.gather(1, indices[:, :, None].expand(-1, -1, last_dim))
 
-def process_inputs_chunk(fn, *args, chunks=1, dim=0):
-    chunked_inputs = list(map(lambda x: x.chunk(chunks, dim=dim), args))
-    outputs = [fn(*input_pair) for input_pair in zip(*chunked_inputs)]
-    return tuple(map(lambda x: torch.cat(x, dim=dim), zip(*outputs)))
+def process_inputs_chunk(fn, chunks=1, dim=0):
+    def inner_fn(*args, **kwargs):
+        keys, values, len_args = kwargs.keys(), kwargs.values(), len(args)
+        chunked_args = list(zip(*map(lambda x: x.chunk(chunks, dim=dim), list(args) + list(values))))
+        all_args = map(lambda x: (x[:len_args], dict(zip(keys, x[len_args:]))), chunked_args)
+        outputs = [fn(*c_args, **c_kwargs) for c_args, c_kwargs in all_args]
+        return tuple(map(lambda x: torch.cat(x, dim=dim), zip(*outputs)))
+    return inner_fn
 
 def chunked_sum(tensor, chunks=1):
     *orig_size, last_dim = tensor.shape
@@ -54,17 +59,6 @@ def max_neg_value(tensor):
 
 # helper classes
 
-class FixedPositionEmbedding(nn.Module):
-    def __init__(self, dim):
-        super().__init__()
-        inv_freq = 1 / (10000 ** (torch.arange(0, dim, 2) / dim))
-        self.register_buffer('inv_freq', inv_freq)
-
-    def forward(self, positions):
-        sinusoid_inp = torch.einsum("i,j->ij", positions.float(), self.inv_freq)
-        emb = torch.cat((sinusoid_inp.sin(), sinusoid_inp.cos()), dim=-1)
-        return emb[None, :, :]
-
 class ScaleNorm(nn.Module):
     def __init__(self, dim, eps=1e-5):
         super().__init__()
@@ -80,9 +74,9 @@ class WithNorm(nn.Module):
         super().__init__()
         self.norm = norm_class(dim)
         self.fn = fn
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         x = self.norm(x)
-        return self.fn(x)
+        return self.fn(x, **kwargs)
 
 class Chunk(nn.Module):
     def __init__(self, chunks, fn, along_dim = -1):
@@ -94,20 +88,6 @@ class Chunk(nn.Module):
     def forward(self, x):
         chunks = x.chunk(self.chunks, dim = self.dim)
         return torch.cat([self.fn(c) for c in chunks], dim = self.dim)
-
-class SettableArgs(nn.Module):
-    def __init__(self, fn, *args, **kwargs):
-        super().__init__()
-        self.args = args
-        self.kwargs = kwargs
-        self.fn = fn
-
-    def set_args(self, *args, **kwargs):
-        self.args = args
-        self.kwargs = kwargs
-
-    def forward(self, x):
-        return self.fn(x, *self.args, **self.kwargs)
 
 # LSH attention as described in https://openreview.net/pdf?id=rkgNKkHtvB
 # adapted from trax, stripped to what paper said needed to work
@@ -198,7 +178,7 @@ class LSHAttention(nn.Module):
     def forward(self, qk, v, query_len = None, input_mask = None, input_attn_mask = None):
         batch_size, seqlen, dim = qk.shape
 
-        assert seqlen % (self.bucket_size * 2) == 0, 'Sequence length ({}) needs to be divisible by target bucket size  x 2 - {}'.format(seqlen, self.bucket_size * 2)
+        assert seqlen % (self.bucket_size * 2) == 0, "Sequence length ({}) needs to be divisible by target bucket size  x 2 - {self.bucket_size * 2}".format(seqlen)
 
         query_len = default(query_len, seqlen)
         device = qk.device
@@ -378,9 +358,10 @@ class LSHAttention(nn.Module):
 # simple full attention
 
 class FullQKAttention(nn.Module):
-    def __init__(self, causal = False):
+    def __init__(self, causal = False, dropout = 0.):
         super().__init__()
         self.causal = causal
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, qk, v, query_len = None, input_mask = None, input_attn_mask = None):
         b, seq_len, dim = qk.shape
@@ -413,6 +394,8 @@ class FullQKAttention(nn.Module):
             dot[:, i, j] = masked_value
 
         dot = dot.softmax(dim=-1)
+        dot = self.dropout(dot)
+
         out = torch.einsum('bij,bje->bie', dot, v)
 
         return out, dot, torch.empty(0)
@@ -420,21 +403,25 @@ class FullQKAttention(nn.Module):
 # Shared qk attention, using either full or LSH attention
 
 class LSHSelfAttention(nn.Module):
-    def __init__(self, dim, heads = 8, bucket_size = 64, n_hashes = 8, causal = False, attn_chunks = None, random_rotations_per_head = False, attend_across_buckets = True, allow_duplicate_attention = True, num_mem_kv = 0, use_full_attn = False, full_attn_thres = None, return_attn = False, **kwargs):
+    def __init__(self, dim, heads = 8, bucket_size = 64, n_hashes = 8, causal = False, attn_chunks = 1, random_rotations_per_head = False, attend_across_buckets = True, allow_duplicate_attention = True, num_mem_kv = 0, one_value_head = False, use_full_attn = False, full_attn_thres = None, return_attn = False, post_attn_dropout = 0., dropout = 0., **kwargs):
         super().__init__()
         assert dim % heads == 0, 'dimensions must be divisible by number of heads'
 
         self.dim = dim
         self.heads = heads
-        self.attn_chunks = default(attn_chunks, heads)
+        self.attn_chunks = default(attn_chunks, 1)
+
+        self.v_head_repeats = (heads if one_value_head else 1)
+        v_dim = dim // self.v_head_repeats
 
         self.toqk = nn.Linear(dim, dim, bias = False)
-        self.tov = nn.Linear(dim, dim, bias = False)
+        self.tov = nn.Linear(dim, v_dim, bias = False)
         self.to_out = nn.Linear(dim, dim)
 
         self.bucket_size = bucket_size
-        self.lsh_attn = LSHAttention(bucket_size=bucket_size, n_hashes=n_hashes, causal=causal, random_rotations_per_head=random_rotations_per_head, attend_across_buckets = attend_across_buckets,  allow_duplicate_attention = allow_duplicate_attention, return_attn = return_attn, **kwargs)
-        self.full_attn = FullQKAttention(causal = causal)
+        self.lsh_attn = LSHAttention(bucket_size=bucket_size, n_hashes=n_hashes, causal=causal, random_rotations_per_head=random_rotations_per_head, attend_across_buckets = attend_across_buckets,  allow_duplicate_attention = allow_duplicate_attention, return_attn = return_attn, dropout = dropout, **kwargs)
+        self.full_attn = FullQKAttention(causal = causal, dropout = dropout)
+        self.post_attn_dropout = nn.Dropout(post_attn_dropout)
 
         self.use_full_attn = use_full_attn
         self.full_attn_thres = default(full_attn_thres, bucket_size)
@@ -460,6 +447,7 @@ class LSHSelfAttention(nn.Module):
         x = torch.cat((x, mem, keys), dim=1)
         qk = self.toqk(x)
         v = self.tov(x)
+        v = v.repeat(1, 1, self.v_head_repeats)
 
         def merge_heads(v):
             return v.view(b, kv_len, h, -1).transpose(1, 2).reshape(b * h, kv_len, -1)
@@ -470,23 +458,32 @@ class LSHSelfAttention(nn.Module):
         qk = merge_heads(qk)
         v = merge_heads(v)
 
-        mask = None
+        masks = {}
         if input_mask is not None or context_mask is not None:
             default_mask = torch.tensor([True], device=device)
             i_mask = default(input_mask, default_mask.expand(b, t))
             m_mask = default_mask.expand(b, m)
             c_mask = default(context_mask, default_mask.expand(b, c))
             mask = torch.cat((i_mask, m_mask, c_mask), dim=1)
+            mask = mask[:, None, :].expand(b, h, kv_len).reshape(b * h, kv_len)
+            masks['input_mask'] = mask
+
+        if input_attn_mask is not None:
+            input_attn_mask = input_attn_mask[:, None, :, :].expand(b, h, t, t).reshape(b * h, t, t)
+            masks['input_attn_mask'] = input_attn_mask
 
         attn_fn = self.lsh_attn if not use_full_attn else self.full_attn
-        partial_attn_fn = partial(attn_fn, query_len = t, input_mask = mask, input_attn_mask = input_attn_mask)
-        out, attn, buckets = process_inputs_chunk(partial_attn_fn, qk, v, chunks=self.attn_chunks)
+        partial_attn_fn = partial(attn_fn, query_len = t)
+        attn_fn_in_chunks = process_inputs_chunk(partial_attn_fn, chunks = self.attn_chunks)
+
+        out, attn, buckets = attn_fn_in_chunks(qk, v, **masks)
         out = split_heads(out).view(b, t, e)
 
         if self.callback is not None:
             self.callback(attn.reshape(b, h, t, -1), buckets.reshape(b, h, -1))
 
-        return self.to_out(out)
+        out = self.to_out(out)
+        return self.post_attn_dropout(out)
 
 # feed forward
 
@@ -495,7 +492,7 @@ class GELU_(nn.Module):
         return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
 
 class FeedForward(nn.Module):
-    def __init__(self, dim, mult = 4):
+    def __init__(self, dim, mult = 4, dropout = 0.):
         super().__init__()
 
         GELU = nn.GELU() if hasattr(nn, 'GELU') else GELU_()
@@ -503,25 +500,84 @@ class FeedForward(nn.Module):
         self.net = nn.Sequential(
             nn.Linear(dim, dim * mult),
             GELU,
+            nn.Dropout(dropout),
             nn.Linear(dim * mult, dim))
 
     def forward(self, x):
         return self.net(x)
 
+# positional embeddings
+
+class AbsolutePositionalEmbedding(nn.Module):
+    def __init__(self, dim, max_seq_len):
+        super().__init__()
+        self.emb = nn.Embedding(max_seq_len, dim)
+
+    def forward(self, x):
+        t = torch.arange(x.shape[1], device=x.device)
+        return self.emb(t)
+
+class FixedPositionalEmbedding(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        inv_freq = 1 / (10000 ** (torch.arange(0, dim, 2) / dim))
+        self.register_buffer('inv_freq', inv_freq)
+
+    def forward(self, x):
+        t = torch.arange(x.shape[1], device=x.device)
+        sinusoid_inp = torch.einsum("i,j->ij", t.float(), self.inv_freq)
+        emb = torch.cat((sinusoid_inp.sin(), sinusoid_inp.cos()), dim=-1)
+        return emb[None, :, :]
+
+# rewritten from https://github.com/google/trax/blob/master/trax/layers/attention.py#L126
+# with help from @AranKomat
+class AxialPositionalEncoding(nn.Module):
+    def __init__(self, dim, max_seq_len, axial_shape = (), axial_emb_dims = ()):
+        super().__init__()
+        assert sum(axial_emb_dims) == dim, 'axial position embedding dimensions must sum to model dimension'
+        assert reduce(mul, axial_shape, 1) == max_seq_len, 'axial position shape must multiply up to max sequence length'
+
+        self.seq_len = max_seq_len
+        self.shape = axial_shape
+        self.emb_dims = axial_emb_dims
+
+        self.weights = nn.ParameterList([])
+        for ind, (d_emb, shape) in enumerate(zip(self.emb_dims, self.shape)):
+            ax_shape = [1] * len(self.shape)
+            ax_shape[ind] = shape
+            ax_shape = (1, *ax_shape, d_emb)
+            ax_emb = nn.Parameter(torch.zeros(ax_shape).normal_(0, 1))
+            self.weights.append(ax_emb)
+
+    def forward(self, x):
+        b, t, e = x.shape
+        embs = []
+
+        for ax_emb in self.weights:
+            ax_emb_dim = ax_emb.shape[-1]
+            expand_shape = (b, *self.shape, ax_emb_dim)
+            emb = ax_emb.expand(expand_shape).reshape(b, self.seq_len, ax_emb_dim)
+            embs.append(emb)
+
+        pos_emb = torch.cat(embs, dim=-1)
+        return pos_emb[:, :t]
+
 # reformer lm
 
 class Reformer(nn.Module):
-    def __init__(self, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., layer_dropout = 0., lsh_attend_across_buckets = True, lsh_allow_duplicate_attention = True, random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, num_mem_kv = 0):
+    def __init__(self, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 8, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., ff_dropout = 0., post_attn_dropout = 0., layer_dropout = 0., lsh_attend_across_buckets = True, lsh_allow_duplicate_attention = True, random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, reverse_thres = 0, num_mem_kv = 0, one_value_head = False):
         super().__init__()
         self.dim = dim
         self.depth = depth
 
         self.bucket_size = bucket_size
         self.num_mem_kv = num_mem_kv
+
+        self.twin_attention = twin_attention
         self.full_attn_thres = full_attn_thres
 
-        get_attn = lambda: SettableArgs(LSHSelfAttention(dim, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, attn_chunks = attn_chunks, allow_duplicate_attention = lsh_allow_duplicate_attention, attend_across_buckets = lsh_attend_across_buckets, random_rotations_per_head = random_rotations_per_head, num_mem_kv = num_mem_kv, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres))
-        get_ff = lambda: FeedForward(dim)
+        get_attn = lambda: LSHSelfAttention(dim, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, post_attn_dropout = post_attn_dropout, attn_chunks = attn_chunks, allow_duplicate_attention = lsh_allow_duplicate_attention, attend_across_buckets = lsh_attend_across_buckets, random_rotations_per_head = random_rotations_per_head, num_mem_kv = num_mem_kv, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, one_value_head = one_value_head)
+        get_ff = lambda: FeedForward(dim, dropout = ff_dropout)
 
         if weight_tie:
             get_attn = cache_fn(get_attn)
@@ -542,35 +598,36 @@ class Reformer(nn.Module):
 
             blocks.append(nn.ModuleList([f, g]))
 
-        self.layers = ReversibleSequence(nn.ModuleList(blocks), layer_dropout = layer_dropout)
-        self.layer_modules = list(chain(*[m for m in blocks]))
-
-    def set_reversible_args(self, *args, **kwargs):
-        for module in self.layer_modules:
-            if isinstance(module, SettableArgs):
-                module.set_args(*args, **kwargs)
+        self.layers = ReversibleSequence(nn.ModuleList(blocks), layer_dropout = layer_dropout, reverse_thres = reverse_thres)
 
     def forward(self, x, **kwargs):
         x = torch.cat([x, x], dim = -1)
-        self.set_reversible_args(**kwargs)
-        x = self.layers(x)
+        arg_route = (True, self.twin_attention)
+        x = self.layers(x, arg_route = arg_route, **kwargs)
         return torch.stack(x.chunk(2, dim=-1)).sum(dim=0)
 
 class ReformerLM(nn.Module):
-    def __init__(self, num_tokens, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 4, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0., layer_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, num_mem_kv = 0, emb_dim = None, return_embeddings = False, fixed_position_emb = False):
+    def __init__(self, num_tokens, dim, depth, max_seq_len, heads = 8, bucket_size = 64, n_hashes = 4, ff_chunks = 100, attn_chunks = 1, causal = False, weight_tie = False, lsh_dropout = 0., ff_dropout = 0., post_attn_dropout = 0., layer_dropout = 0., random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, reverse_thres = 0, num_mem_kv = 0, one_value_head = False, emb_dim = None, return_embeddings = False, fixed_position_emb = False, axial_position_emb = False, axial_position_shape = (), axial_position_dims = ()):
         super().__init__()
         emb_dim = default(emb_dim, dim)
+        self.max_seq_len = max_seq_len
+
         self.token_emb = nn.Embedding(num_tokens, emb_dim)
-        self.pos_emb = FixedPositionEmbedding(emb_dim) if fixed_position_emb else nn.Embedding(max_seq_len, emb_dim)
         self.to_model_dim = identity if emb_dim == dim else nn.Linear(emb_dim, dim)
 
-        self.reformer = Reformer(dim, depth, max_seq_len, heads = heads, bucket_size = bucket_size, n_hashes = n_hashes, ff_chunks = ff_chunks, attn_chunks = attn_chunks, causal = causal, weight_tie = weight_tie, lsh_dropout = lsh_dropout, layer_dropout = layer_dropout, random_rotations_per_head = random_rotations_per_head, twin_attention = twin_attention, use_scale_norm = use_scale_norm, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, num_mem_kv = num_mem_kv)
+        if axial_position_emb:
+            self.pos_emb = AxialPositionalEncoding(emb_dim, max_seq_len, axial_position_shape, axial_position_dims)
+        elif fixed_position_emb:
+            self.pos_emb = FixedPositionalEmbedding(emb_dim)
+        else:
+            self.pos_emb = AbsolutePositionalEmbedding(emb_dim, max_seq_len)
+
+        self.reformer = Reformer(dim, depth, max_seq_len, heads = heads, bucket_size = bucket_size, n_hashes = n_hashes, ff_chunks = ff_chunks, attn_chunks = attn_chunks, causal = causal, weight_tie = weight_tie, lsh_dropout = lsh_dropout, ff_dropout = ff_dropout, post_attn_dropout = 0., layer_dropout = layer_dropout, random_rotations_per_head = random_rotations_per_head, twin_attention = twin_attention, use_scale_norm = use_scale_norm, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, reverse_thres = reverse_thres, num_mem_kv = num_mem_kv, one_value_head = one_value_head)
         self.to_logits = identity if return_embeddings else nn.Linear(dim, num_tokens)
 
     def forward(self, x, **kwargs):
-        t = torch.arange(x.shape[1], device=x.device)
         x = self.token_emb(x)
-        x = x + self.pos_emb(t).type(x.type())
+        x = x + self.pos_emb(x).type(x.type())
 
         x = self.to_model_dim(x)
         x = self.reformer(x, **kwargs)

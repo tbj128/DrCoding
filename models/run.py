@@ -34,7 +34,7 @@ Options:
     --valid-niter=<int>                     perform validation after how many iterations [default: 100]
     --dropout=<float>                       dropout [default: 0.5]
     --max-decoding-time-step=<int>          maximum number of decoding time steps [default: 70]
-    --transformer-depth=<int>               number of Transformer encoder layers to use [default: 6]
+    --transformer-depth=<int>               number of Transformer encoder layers to use [default: 1]
     --transformer-heads=<int>               number of Transformer heads to use [default: 8]
     --verbose                               show additional logging
 """
@@ -207,14 +207,10 @@ def train(args: Dict):
     elif model_type == "transformer":
         model = TransformerClassifier(
             vocab=vocab,
-            embed_size=int(args['--word-embed-size']),
-            hidden_size=int(args['--hidden-size']),
-            depth=int(args['--transformer-depth']),
-            max_seq_len=int(args['--target-length']),
-            num_heads=int(args['--transformer-heads']),
-            layer_dropout=float(args['--dropout']),
-            glove_path=args['--glove-path'],
-            device=device
+            ninp=int(args['--word-embed-size']),
+            nhid=int(args['--hidden-size']),
+            nlayers=int(args['--transformer-depth']),
+            nhead=int(args['--transformer-heads'])
         )
     else:
         raise NotImplementedError("Invalid model type")

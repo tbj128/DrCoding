@@ -50,7 +50,7 @@ def create_embedding_from_glove(glove_path, vocab, device):
     num_embeddings, embedding_dim = weights_matrix.size()
     emb_layer = nn.Embedding(num_embeddings, embedding_dim)
     emb_layer.load_state_dict({'weight': weights_matrix})
-    emb_layer.weight.requires_grad = False
+    emb_layer.weight.requires_grad = True
 
     return emb_layer, num_embeddings, embedding_dim
 
@@ -85,7 +85,6 @@ def read_source_text(file_path, target_length=1000, pad_token='<pad>', use_cls=F
             length = target_length
         while len(sent) < target_length:
             sent.append(pad_token)
-            length += 1
         data.append(sent)
         source_lengths.append(length)
 

@@ -85,12 +85,13 @@ class ReformerClassifier(nn.Module):
         self.dropout = nn.Dropout(0.3)
 
     def forward(self, x, source_lengths, **kwargs):
+        mask = (x == self.vocab.discharge.pad_token).to(x.device)
         t = torch.arange(x.shape[1], device=x.device)
         x = self.token_emb(x)
         # x = x + self.pos_emb(t).type(x.type())
 
         # x = self.to_model_dim(x)
-        hidden_state = self.reformer(x, **kwargs)  # (bs, seq length, dim)
+        hidden_state = self.reformer(x, input_mask=mask)  # (bs, seq length, dim)
         pooled_output = hidden_state[:, 0, :]  # (bs, dim) - we take the first character (the CLS token)
         pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
         # pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)
