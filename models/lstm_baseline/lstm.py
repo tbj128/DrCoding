@@ -37,7 +37,7 @@ class DischargeLSTM(nn.Module):
         self.dropout_rate = dropout_rate
         self.embed_size = embed_size
 
-        if glove_path is not None and glove_path != "":
+        if glove_path is not None and glove_path != "NONE":
             emb_layer, num_embeddings, embedding_dim = create_embedding_from_glove(glove_path, self.vocab, device)
             self.embeddings = emb_layer
             self.embed_size = embedding_dim

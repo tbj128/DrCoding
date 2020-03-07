@@ -12,7 +12,7 @@ Options:
     -h --help                               show this screen.
     --cuda                                  use GPU
     --model=<str>                           the type of model to train [default: baseline]
-    --glove-path=<file>                     the glove embedding file [default: ""]
+    --glove-path=<file>                     the glove embedding file [default: NONE]
     --train-src=<file>                      train source file
     --dev-src=<file>                        dev source file
     --vocab=<file>                          vocab file
@@ -29,7 +29,7 @@ Options:
     --max-num-trial=<int>                   terminate training after how many trials [default: 5]
     --lr-decay=<float>                      learning rate decay [default: 0.5]
     --lr=<float>                            learning rate [default: 0.001]
-    --uniform-init=<float>                  uniformly initialize all parameters [default: 0.5]
+    --uniform-init=<float>                  uniformly initialize all parameters [default: 0.1]
     --save-to=<file>                        model save path [default: model.bin]
     --valid-niter=<int>                     perform validation after how many iterations [default: 100]
     --dropout=<float>                       dropout [default: 0.5]
@@ -82,6 +82,30 @@ logger.info('Starting run.py')
 
 ################################################################################
 
+def union_size(yhat, y, axis):
+    return np.logical_or(yhat, y).sum(axis=axis).astype(float)
+
+def intersect_size(yhat, y, axis):
+    return np.logical_and(yhat, y).sum(axis=axis).astype(float)
+
+def micro_accuracy(yhatmic, ymic):
+    return intersect_size(yhatmic, ymic, 0) / union_size(yhatmic, ymic, 0)
+
+def micro_precision(yhatmic, ymic):
+    return intersect_size(yhatmic, ymic, 0) / yhatmic.sum(axis=0) if yhatmic.sum(axis=0) != 0 else 0
+
+def micro_recall(yhatmic, ymic):
+    return intersect_size(yhatmic, ymic, 0) / ymic.sum(axis=0) if ymic.sum(axis=0) != 0 else 0
+
+def micro_f1(yhatmic, ymic):
+    prec = micro_precision(yhatmic, ymic)
+    rec = micro_recall(yhatmic, ymic)
+    if prec + rec == 0 or prec + rec == np.float64("nan"):
+        f1 = 0.
+    else:
+        f1 = 2*(prec*rec)/(prec+rec)
+    return f1
+
 def evaluate_scores(references: List[List[str]], predicted: List[List[str]]):
     """
     Given set of references and predicted ICD codes, return the precision, recall, f1, and accuracy statistics
@@ -97,6 +121,7 @@ def evaluate_scores(references: List[List[str]], predicted: List[List[str]]):
         precision += precision_score(references[i], predicted[i])
         recall += recall_score(references[i], predicted[i])
         accuracy += accuracy_score(references[i], predicted[i])
+        print(micro_f1(np.array(references[i]), np.array(predicted[i])))
 
     return precision / len(references), recall / len(references), f1 / len(references), accuracy / len(references)
 
@@ -141,7 +166,7 @@ def evaluate_model_with_dev(args, model, dev_data, device, batch_size=32):
     model.eval()
 
     # no_grad() signals backend to throw away all gradients
-    preds, icds = predict_output(args, model, dev_data, device, batch_size, is_test=False)
+    preds, icds = predict_output(args, model, dev_data, device, batch_size=batch_size, is_test=False)
 
     # print("-----------------------")
     # print("Preds {}".format(preds))
