@@ -4,9 +4,8 @@
 """
 
 Usage:
-    baseline.py train --train-src=<file> --dev-src=<file> --vocab=<file> [options]
-    baseline.py predict [options] MODEL_PATH TEST_SOURCE_FILE OUTPUT_FILE
-    baseline.py predict [options] MODEL_PATH TEST_SOURCE_FILE TEST_TARGET_FILE OUTPUT_FILE
+    run.py train --train-src=<file> --dev-src=<file> --vocab=<file> [options]
+    run.py predict [options] MODEL_PATH TEST_SOURCE_FILE OUTPUT_FILE
 
 Options:
     -h --help                               show this screen.
@@ -64,6 +63,7 @@ from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_sc
 from vanilla_transformer.transformer_classifier import TransformerClassifier
 from vocab import Vocab
 import logging
+import csv
 
 ################################################################################
 # LOGGER setup
@@ -191,7 +191,7 @@ def train(args: Dict):
     elif model_type == "reformer":
         model = ReformerClassifier(
             vocab=vocab,
-            dim=int(args['--word-embed-size']),
+            embed_size=int(args['--word-embed-size']),
             depth=int(args['--transformer-depth']),
             max_seq_len=int(args['--target-length']),
             num_heads=int(args['--transformer-heads']),
@@ -366,14 +366,7 @@ def train(args: Dict):
 def predict_icd_codes(args: Dict[str, str]):
     print("load test source sentences from [{}]".format(args['TEST_SOURCE_FILE']), file=sys.stderr)
     use_cls = args["--model"] != "baseline"
-    test_source_text, test_source_lengths = read_source_text(args['TEST_SOURCE_FILE'], target_length=int(args["--target-length"]), use_cls=use_cls)
-
-    if args['TEST_TARGET_FILE']:
-        print("load test icd codes from [{}]".format(args['TEST_TARGET_FILE']), file=sys.stderr)
-        test_icd_codes = read_icd_codes(args['TEST_TARGET_FILE'])
-    else:
-        test_icd_codes = None
-
+    test_source_text, test_source_lengths, test_icd_codes = read_source_text(args['TEST_SOURCE_FILE'], target_length=int(args["--target-length"]), use_cls=use_cls)
     test_data = list(zip(test_source_text, test_source_lengths, test_icd_codes))
 
     print("load model from {}".format(args['MODEL_PATH']), file=sys.stderr)
@@ -399,14 +392,15 @@ def predict_icd_codes(args: Dict[str, str]):
 
     if was_training: model.train(was_training)
 
-    if test_icd_codes is not None:
-        precision, recall, f1, accuracy = evaluate_scores(icds, preds)
-        print('Precision {}, recall {}, f1 {}, accuracy: {}'.format(precision, recall, f1, accuracy), file=sys.stderr)
-        logger.info('Precision {}, recall {}, f1 {}, accuracy: {}'.format(precision, recall, f1, accuracy))
+    precision, recall, f1, accuracy = evaluate_scores(icds, preds)
+    print('Precision {}, recall {}, f1 {}, accuracy: {}'.format(precision, recall, f1, accuracy), file=sys.stderr)
+    logger.info('Precision {}, recall {}, f1 {}, accuracy: {}'.format(precision, recall, f1, accuracy))
 
     with open(args['OUTPUT_FILE'], 'w') as f:
-        for pred in preds:
-            f.write(pred + '\n')
+        csv_writer = csv.writer(f)
+        decoded_icd_preds = model.vocab.icd.from_one_hot(preds)
+        for decoded_icd_pred in decoded_icd_preds:
+            csv_writer.writerow(decoded_icd_pred)
 
 
 def main():

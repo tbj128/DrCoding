@@ -98,6 +98,18 @@ class ICDVocab(object):
             data.append(out_arr)
         return torch.tensor(data, dtype=torch.float, device=device)
 
+    def from_one_hot(self, one_hot):
+        """
+        """
+        data = []
+        for row in one_hot:
+            output_row = []
+            for index in range(len(row)):
+                if row[index] == 1:
+                    output_row.append(self.id2icd[index])
+            data.append(output_row)
+        return data
+
     @staticmethod
     def from_source(source_icds):
         icd_vocab = ICDVocab()
