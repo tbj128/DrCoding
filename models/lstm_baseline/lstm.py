@@ -36,6 +36,7 @@ class DischargeLSTM(nn.Module):
         self.hidden_size = hidden_size
         self.dropout_rate = dropout_rate
         self.embed_size = embed_size
+        self.device = device
 
         if glove_path is not None and glove_path != "NONE":
             emb_layer, num_embeddings, embedding_dim = create_embedding_from_glove(glove_path, self.vocab, device)
@@ -84,7 +85,7 @@ class DischargeLSTM(nn.Module):
         """
         print('save model parameters to [%s]' % path, file=sys.stderr)
         params = {
-            'args': dict(hidden_size=self.hidden_size, dropout_rate=self.dropout_rate, embed_size=self.embed_size),
+            'args': dict(hidden_size=self.hidden_size, dropout_rate=self.dropout_rate, embed_size=self.embed_size, device=self.device, glove_path=self.glove_path),
             'vocab': self.vocab,
             'state_dict': self.state_dict()
         }

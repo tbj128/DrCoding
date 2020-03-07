@@ -10,7 +10,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset
 from vocab import Vocab
-from utils import read_source_text
+from utils import create_embedding_from_glove
 
 
 def identity(x):
@@ -29,31 +29,35 @@ class FixedPositionEmbedding(nn.Module):
         return emb[None, :, :]
 
 class TransformerClassifier(nn.Module):
-    def __init__(self, vocab, dim, depth, max_seq_len, num_heads = 8, layer_dropout = 0., fixed_position_emb = False):
+    def __init__(self, vocab, embed_size, hidden_size, depth, max_seq_len, device, num_heads = 8, layer_dropout = 0., fixed_position_emb = False, glove_path=None):
         """
         """
         super().__init__()
-        emb_dim = dim
         self.vocab = vocab
-        self.dim = dim
+        self.embed_size = embed_size
+        self.hidden_size = hidden_size
         self.depth = depth
         self.max_seq_len = max_seq_len
         self.num_heads = num_heads
         self.layer_dropout = layer_dropout
         self.fixed_position_emb = fixed_position_emb
+        self.device = device
+        self.glove_path = glove_path
+        self.num_output_classes = len(self.vocab.icd)
 
         num_tokens = len(vocab.discharge) # Number of tokens in the discharge note vocabulary
-        self.token_emb = nn.Embedding(num_tokens, emb_dim)
-        self.num_output_classes = len(self.vocab.icd)
-        self.pos_emb = FixedPositionEmbedding(emb_dim) if fixed_position_emb else nn.Embedding(max_seq_len, emb_dim)
-        self.to_model_dim = identity if emb_dim == dim else nn.Linear(emb_dim, dim)
 
-        encoder_layer = nn.TransformerEncoderLayer(d_model=dim, nhead=num_heads, dropout=0.1)
+        if glove_path is not None and glove_path != "NONE":
+            emb_layer, num_embeddings, embedding_dim = create_embedding_from_glove(glove_path, self.vocab, device)
+            self.embeddings = emb_layer
+        else:
+            self.embeddings = nn.Embedding(len(self.vocab.discharge), embed_size, padding_idx=self.vocab.discharge.pad_token)
+
+        encoder_layer = nn.TransformerEncoderLayer(d_model=max_seq_len, nhead=num_heads, dropout=0.1)
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=depth)
 
-        self.to_logits = nn.Linear(dim, num_tokens)
-        self.pre_classifier = nn.Linear(dim, dim)
-        self.classifier = nn.Linear(dim, self.num_output_classes)
+        self.pre_classifier = nn.Linear(max_seq_len, max_seq_len)
+        self.classifier = nn.Linear(max_seq_len, self.num_output_classes)
         self.dropout = nn.Dropout(self.layer_dropout)
 
 
@@ -62,8 +66,8 @@ class TransformerClassifier(nn.Module):
         # mask = self.generate_sent_masks(x, source_lengths)
 
         # t = torch.arange(x.shape[1], device=x.device)
-        x = self.token_emb(x)
-        x = x.permute(x.shape[1], x.shape[0], x.shape[2]).contiguous()
+        x = self.embeddings(x)
+        x = x.permute(1, 0, 2).contiguous()
 
         # x = x + self.pos_emb(t).type(x.type())
 
@@ -77,8 +81,8 @@ class TransformerClassifier(nn.Module):
 
 
         pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
-        # pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)
-        pooled_output = nn.Tanh()(pooled_output)  # (bs, dim)
+        pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)
+        # pooled_output = nn.Tanh()(pooled_output)  # (bs, dim)
         pooled_output = self.dropout(pooled_output)  # (bs, dim)
         logits = self.classifier(pooled_output)  # (bs, dim)
 
@@ -104,12 +108,16 @@ class TransformerClassifier(nn.Module):
         print('save model parameters to [%s]' % path, file=sys.stderr)
 
         args = dict(
-            dim=self.dim,
+            emb_dim=self.emb_dim,
             depth=self.depth,
+            hidden_size=self.hidden_size,
             max_seq_len=self.max_seq_len,
             num_heads=self.num_heads,
             layer_dropout=self.layer_dropout,
-            fixed_position_emb=self.fixed_position_emb
+            fixed_position_emb=self.fixed_position_emb,
+            device=self.device,
+            glove_path=self.glove_path
+
         )
 
         params = {

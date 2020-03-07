@@ -82,30 +82,6 @@ logger.info('Starting run.py')
 
 ################################################################################
 
-def union_size(yhat, y, axis):
-    return np.logical_or(yhat, y).sum(axis=axis).astype(float)
-
-def intersect_size(yhat, y, axis):
-    return np.logical_and(yhat, y).sum(axis=axis).astype(float)
-
-def micro_accuracy(yhatmic, ymic):
-    return intersect_size(yhatmic, ymic, 0) / union_size(yhatmic, ymic, 0)
-
-def micro_precision(yhatmic, ymic):
-    return intersect_size(yhatmic, ymic, 0) / yhatmic.sum(axis=0) if yhatmic.sum(axis=0) != 0 else 0
-
-def micro_recall(yhatmic, ymic):
-    return intersect_size(yhatmic, ymic, 0) / ymic.sum(axis=0) if ymic.sum(axis=0) != 0 else 0
-
-def micro_f1(yhatmic, ymic):
-    prec = micro_precision(yhatmic, ymic)
-    rec = micro_recall(yhatmic, ymic)
-    if prec + rec == 0 or prec + rec == np.float64("nan"):
-        f1 = 0.
-    else:
-        f1 = 2*(prec*rec)/(prec+rec)
-    return f1
-
 def evaluate_scores(references: List[List[str]], predicted: List[List[str]]):
     """
     Given set of references and predicted ICD codes, return the precision, recall, f1, and accuracy statistics
@@ -121,7 +97,7 @@ def evaluate_scores(references: List[List[str]], predicted: List[List[str]]):
         precision += precision_score(references[i], predicted[i])
         recall += recall_score(references[i], predicted[i])
         accuracy += accuracy_score(references[i], predicted[i])
-        print(micro_f1(np.array(references[i]), np.array(predicted[i])))
+        # print(micro_f1(np.array(references[i]), np.array(predicted[i])))
 
     return precision / len(references), recall / len(references), f1 / len(references), accuracy / len(references)
 
@@ -136,7 +112,6 @@ def predict_output(args, model, dev_data, device,  thresh: float = 0.3, batch_si
             batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)
 
             model_out = model(batch_src_text_tensor, batch_src_lengths)
-            # top_prediction_indices = torch.argmax(F.softmax(model_out, dim=1), dim=1)  # bs x 1
             output_scores = F.softmax(model_out, dim=1)  # bs x classes
 
             for output_score_arr in output_scores.cpu().tolist():
@@ -151,9 +126,9 @@ def predict_output(args, model, dev_data, device,  thresh: float = 0.3, batch_si
             if is_test:
                 print("   > Completed {}/{}".format(completed, len(dev_data)), end='\r', flush=True)
 
-    y_pred = torch.tensor(preds)
-    y_true = torch.tensor(icds)
-    print("Accuracy {}".format(np.mean(((y_pred>thresh)==y_true.byte()).float().cpu().numpy(), axis=1).sum()))
+    # y_pred = torch.tensor(preds)
+    # y_true = torch.tensor(icds)
+    # print("Accuracy {}".format(np.mean(((y_pred>thresh)==y_true.byte()).float().cpu().numpy(), axis=1).sum()))
 
     return preds, icds
 
@@ -232,11 +207,14 @@ def train(args: Dict):
     elif model_type == "transformer":
         model = TransformerClassifier(
             vocab=vocab,
-            dim=int(args['--word-embed-size']),
+            embed_size=int(args['--word-embed-size']),
+            hidden_size=int(args['--hidden-size']),
             depth=int(args['--transformer-depth']),
             max_seq_len=int(args['--target-length']),
             num_heads=int(args['--transformer-heads']),
-            layer_dropout=float(args['--dropout'])
+            layer_dropout=float(args['--dropout']),
+            glove_path=args['--glove-path'],
+            device=device
         )
     else:
         raise NotImplementedError("Invalid model type")
