@@ -33,8 +33,6 @@ def create_embedding_from_glove(glove_path, vocab, device):
             embed_size = len(embedding)
             i += 1
             print("   > Completed {}".format(i), end='\r', flush=True)
-            if i > 1000:
-                break
 
     weights_matrix = np.zeros((len(vocab.discharge), embed_size))
     words_found = 0
