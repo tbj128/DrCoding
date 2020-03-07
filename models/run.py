@@ -395,7 +395,7 @@ def predict_icd_codes(args: Dict[str, str]):
     device = torch.device("cuda:0" if args['--cuda'] else "cpu")
     print('Using device: %s' % device, file=sys.stderr)
 
-    preds, icds = predict_output(args, model, test_data, device, batch_size=128, is_test=True)
+    preds, icds = predict_output(args, model, test_data, device, batch_size=int(args["--batch-size"]), is_test=True)
 
     if was_training: model.train(was_training)
 
