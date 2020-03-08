@@ -23,6 +23,7 @@ Options:
     --clip-grad=<float>                     gradient clipping [default: 5.0]
     --log-every=<int>                       log every [default: 10]
     --max-epoch=<int>                       max epoch [default: 30]
+    --threshold=<int>                       threshold to predict presence of an ICD code [default: 0.3]
     --input-feed                            use input feeding
     --patience=<int>                        wait for how many iterations to decay learning rate [default: 5]
     --max-num-trial=<int>                   terminate training after how many trials [default: 5]
@@ -107,7 +108,8 @@ def evaluate_scores(references: List[List[str]], predicted: List[List[str]]):
     return precision / len(references), recall / len(references), f1 / len(references), accuracy / len(references)
 
 
-def predict_output(args, model, dev_data, device,  thresh: float = 0.3, batch_size=32, is_test=False):
+def predict_output(args, model, dev_data, device, batch_size=32, is_test=False):
+    thresh = float(args['--threshold'])
     preds = []
     icds = []
     completed = 0
