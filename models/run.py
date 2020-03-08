@@ -465,6 +465,9 @@ def predict_icd_codes(args: Dict[str, str]):
     test_data = list(zip(test_source_text, test_source_lengths, test_icd_codes))
 
     print("load model from {}".format(args['MODEL_PATH']), file=sys.stderr)
+
+    vocab = Vocab.load(args['--vocab-test'])
+    # TODO: Remove vocab from models
     if args["--model"] == "baseline":
         model = DischargeLSTM.load(args['MODEL_PATH'])
     elif args["--model"] == "reformer":
@@ -472,11 +475,9 @@ def predict_icd_codes(args: Dict[str, str]):
     elif args["--model"] == "transformer":
         model = TransformerClassifier.load(args['MODEL_PATH'])
     elif args["--model"] == "bert":
-        vocab = Vocab.load(args['--vocab-test'])
         model = BertClassifier.load(args['MODEL_PATH'], args['--base-bert-path'], num_labels=len(vocab.icd))
         model.freeze_bert_encoder()
     elif args["--model"] == "bert-metadata":
-        vocab = Vocab.load(args['--vocab-test'])
         model = BertClassifierWithMetadata.load(args['MODEL_PATH'], args['--base-bert-path'], num_labels=len(vocab.icd))
         model.freeze_bert_encoder()
     else:
@@ -501,7 +502,7 @@ def predict_icd_codes(args: Dict[str, str]):
 
     with open(args['OUTPUT_FILE'], 'w') as f:
         csv_writer = csv.writer(f)
-        decoded_icd_preds = model.vocab.icd.from_one_hot(preds)
+        decoded_icd_preds = vocab.icd.from_one_hot(preds)
         for decoded_icd_pred in decoded_icd_preds:
             csv_writer.writerow(decoded_icd_pred)
 
