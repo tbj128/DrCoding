@@ -15,6 +15,7 @@ Options:
     --train-src=<file>                      train source file
     --dev-src=<file>                        dev source file
     --vocab=<file>                          vocab file [default: vocab.json]
+    --vocab-test=<file>                     vocab file [default: vocab.json]
     --target-length=<int>                   max length of each input sequence [default: 1000]
     --seed=<int>                            seed [default: 0]
     --batch-size=<int>                      batch size [default: 32]
