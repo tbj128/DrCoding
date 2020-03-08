@@ -116,15 +116,15 @@ def predict_output(args, model, dev_data, device, batch_size=32, is_test=False):
     with torch.no_grad():
         for src_text, src_lengths, actual_icds in batch_iter(dev_data, batch_size):
             if args['--model'] == "bert":
-                input_ids = torch.tensor([f.input_ids for f in src_text], dtype=torch.long)
-                input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long)
-                segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long)
+                input_ids = torch.tensor([f.input_ids for f in src_text], dtype=torch.long, device=device)
+                input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long, device=device)
+                segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long, device=device)
                 model_out = model(input_ids, segment_ids, input_mask)
             elif args['--model'] == "bert-metadata":
-                input_ids = torch.tensor([f.input_ids for f in src_text], dtype=torch.long)
-                input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long)
-                segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long)
-                input_ids_metadata = torch.tensor([f.input_ids_metadata for f in src_text], dtype=torch.long)
+                input_ids = torch.tensor([f.input_ids for f in src_text], dtype=torch.long, device=device)
+                input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long, device=device)
+                segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long, device=device)
+                input_ids_metadata = torch.tensor([f.input_ids_metadata for f in src_text], dtype=torch.long, device=device)
                 model_out = model(input_ids, segment_ids, input_mask, metadata_input_ids=input_ids_metadata)
             else:
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
