@@ -453,11 +453,11 @@ def predict_icd_codes(args: Dict[str, str]):
     elif args["--model"] == "transformer":
         model = TransformerClassifier.load(args['MODEL_PATH'])
     elif args["--model"] == "bert":
-        vocab = Vocab.load(args['--vocab'])
+        vocab = Vocab.load(args['--vocab-test'])
         model = BertClassifier.load(args['MODEL_PATH'], args['--base-bert-path'], num_labels=len(vocab.icd))
         model.freeze_bert_encoder()
     elif args["--model"] == "bert-metadata":
-        vocab = Vocab.load(args['--vocab'])
+        vocab = Vocab.load(args['--vocab-test'])
         model = BertClassifierWithMetadata.load(args['MODEL_PATH'], args['--base-bert-path'], num_labels=len(vocab.icd))
         model.freeze_bert_encoder()
     else:
