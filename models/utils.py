@@ -63,7 +63,8 @@ def read_source_text_for_bert(file_path, tokenizer, target_length=1000):
     data_df = pd.read_csv(file_path, header=None)
     for (i, row) in enumerate(data_df.values):
         hadmid = row[0]
-        line = row[1]
+        line = row[1].split(" ")
+        line = " ".join(line[-target_length:]) # prefer to take the last words
         row_icds = row[2:]
 
         icds.append(row_icds)
