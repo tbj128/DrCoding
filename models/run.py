@@ -37,6 +37,7 @@ Options:
     --transformer-heads=<int>               number of Transformer heads to use [default: 8]
     --base-bert-path=<file>                 path to the pre-trained BERT model
     --icd-desc-file=<file>                  file containing hadmid to ICD descriptions
+    --max-metadata-length=<int>             maximum length of the metadata text
     --verbose                               show additional logging
 """
 import math
@@ -51,11 +52,11 @@ from typing import List, Tuple, Dict, Set, Union
 from tqdm import tqdm
 from transformers import BertTokenizer
 
-from bert.bert_classifier import BertClassifier
+from bert.bert_classifier import BertClassifier, BertClassifierWithMetadata
 from linear.linear import TextSentiment
 from lstm_baseline.lstm import DischargeLSTM
 from reformer.reformer_classifier import ReformerClassifier
-from utils import batch_iter, read_source_text, read_source_text_for_bert
+from utils import batch_iter, read_source_text, read_source_text_for_bert,read_source_text_for_bert_with_metadata
 
 import torch
 import torch.nn as nn
@@ -116,7 +117,6 @@ def predict_output(args, model, dev_data, device,  thresh: float = 0.3, batch_si
                 input_ids = torch.tensor([f.input_ids for f in src_text], dtype=torch.long)
                 input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long)
                 segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long)
-                # label_ids = torch.tensor([f.label_ids for f in batch_src_text], dtype=torch.float)
                 model_out = model(input_ids, segment_ids, input_mask)
             else:
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
@@ -174,21 +174,35 @@ def train(args: Dict):
     """
 
     vocab = Vocab.load(args['--vocab'])
-    use_cls = args['--model'] != "baseline"
+    model_type = args['--model']
+    use_cls = model_type != "baseline"
 
-    if args['--model'] == "bert":
+    if model_type == "bert":
         tokenizer = BertTokenizer.from_pretrained(args['--base-bert-path'])
         train_source_text, train_source_lengths, train_icd_codes = read_source_text_for_bert(
             file_path=args['--train-src'],
-            labels=vocab.icd.get_labels_in_order(),
             target_length=int(args['--target-length']),
             tokenizer=tokenizer)
 
         dev_source_text, dev_source_lengths, dev_icd_codes = read_source_text_for_bert(
             file_path=args['--dev-src'],
-            labels=vocab.icd.get_labels_in_order(),
             target_length=int(args['--target-length']),
             tokenizer=tokenizer)
+    elif model_type == "bert-metadata":
+        tokenizer = BertTokenizer.from_pretrained(args['--base-bert-path'])
+        train_source_text, train_source_lengths, train_icd_codes = read_source_text_for_bert_with_metadata(
+            file_path=args['--train-src'],
+            target_length=int(args['--target-length']),
+            tokenizer=tokenizer,
+            metadata_file_path=args['--icd-desc-file']
+        )
+
+        dev_source_text, dev_source_lengths, dev_icd_codes = read_source_text_for_bert_with_metadata(
+            file_path=args['--dev-src'],
+            target_length=int(args['--target-length']),
+            tokenizer=tokenizer,
+            metadata_file_path=args['--icd-desc-file']
+        )
     else:
         train_source_text, train_source_lengths, train_icd_codes = read_source_text(args['--train-src'], target_length=int(args['--target-length']), use_cls=use_cls)
         dev_source_text, dev_source_lengths, dev_icd_codes = read_source_text(args['--dev-src'], target_length=int(args['--target-length']), use_cls=use_cls)
@@ -204,7 +218,6 @@ def train(args: Dict):
     model_save_path = args['--save-to']
     device = torch.device("cuda:0" if args['--cuda'] else "cpu")
 
-    model_type = args['--model']
     tokenizer = None
     if model_type == "baseline":
         model = DischargeLSTM(vocab=vocab,
@@ -239,6 +252,10 @@ def train(args: Dict):
         )
     elif model_type == "bert":
         model = BertClassifier.from_pretrained(args['--base-bert-path'])
+        model.unfreeze_bert_encoder()
+    elif model_type == "bert-metadata":
+        model = BertClassifierWithMetadata.from_pretrained(args['--base-bert-path'])
+        model.unfreeze_bert_encoder()
     else:
         raise NotImplementedError("Invalid model type")
 
@@ -247,7 +264,7 @@ def train(args: Dict):
 
     model.train()
 
-    if model_type != "bert":
+    if model_type != "bert" and model_type != "bert-metadata":
         uniform_init = float(args['--uniform-init'])
         if np.abs(uniform_init) > 0.:
             print('uniformly initialize parameters [-%f, +%f]' % (uniform_init, uniform_init), file=sys.stderr)
@@ -286,8 +303,13 @@ def train(args: Dict):
                 input_ids = torch.tensor([f.input_ids for f in batch_src_text], dtype=torch.long)
                 input_mask = torch.tensor([f.input_mask for f in batch_src_text], dtype=torch.long)
                 segment_ids = torch.tensor([f.segment_ids for f in batch_src_text], dtype=torch.long)
-                # label_ids = torch.tensor([f.label_ids for f in batch_src_text], dtype=torch.float)
                 model_output = model(input_ids, segment_ids, input_mask)
+            elif args['--model'] == "bert-metadata":
+                input_ids = torch.tensor([f.input_ids for f in batch_src_text], dtype=torch.long)
+                input_mask = torch.tensor([f.input_mask for f in batch_src_text], dtype=torch.long)
+                segment_ids = torch.tensor([f.segment_ids for f in batch_src_text], dtype=torch.long)
+                input_ids_metadata = torch.tensor([f.input_ids_metadata for f in batch_src_text], dtype=torch.long)
+                model_output = model(input_ids, segment_ids, input_mask, metadata_input_ids=input_ids_metadata)
             else:
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(batch_src_text, device)
                 batch_src_lengths = torch.tensor(batch_src_lengths, dtype=torch.long, device=device)
@@ -316,7 +338,7 @@ def train(args: Dict):
             batch_losses_val = batch_loss.item()
             total_loss += batch_losses_val
 
-            if model_type == "bert":
+            if model_type == "bert" or model_type == "bert-metadata":
                 total_processed_words += sum(len(s.input_ids) for s in batch_src_text)
             else:
                 total_processed_words += sum(len(s) for s in batch_src_text)
@@ -416,7 +438,10 @@ def predict_icd_codes(args: Dict[str, str]):
         model = TransformerClassifier.load(args['MODEL_PATH'])
     elif args["--model"] == "bert":
         model = BertClassifier.load(args['MODEL_PATH'], args['--base-bert-path'])
-        model.unfreeze_bert_encoder()
+        model.freeze_bert_encoder()
+    elif args["--model"] == "bert-metadata":
+        model = BertClassifierWithMetadata.load(args['MODEL_PATH'], args['--base-bert-path'])
+        model.freeze_bert_encoder()
     else:
         raise NotImplementedError("Not implemented")
 

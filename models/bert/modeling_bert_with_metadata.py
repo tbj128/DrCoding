@@ -18,9 +18,9 @@ Adapted from HuggingFace to incorporate the metadata attention scheme
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch BERT model. """
-
 from __future__ import absolute_import, division, print_function, unicode_literals
+
+"""PyTorch BERT model. """
 
 import json
 import logging
@@ -207,9 +207,12 @@ class BertSelfAttention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None):
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, metadata_hidden_states=None):
         mixed_query_layer = self.query(hidden_states)
-        mixed_key_layer = self.key(hidden_states)
+        if metadata_hidden_states is not None:
+            mixed_key_layer = self.key(metadata_hidden_states)
+        else:
+            mixed_key_layer = self.key(hidden_states)
         mixed_value_layer = self.value(hidden_states)
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
@@ -288,8 +291,8 @@ class BertAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(self, input_tensor, attention_mask=None, head_mask=None):
-        self_outputs = self.self(input_tensor, attention_mask, head_mask)
+    def forward(self, input_tensor, attention_mask=None, head_mask=None, metadata_tensor=None):
+        self_outputs = self.self(input_tensor, attention_mask, head_mask, metadata_tensor)
         attention_output = self.output(self_outputs[0], input_tensor)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -331,8 +334,8 @@ class BertLayer(nn.Module):
         self.intermediate = BertIntermediate(config)
         self.output = BertOutput(config)
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None):
-        attention_outputs = self.attention(hidden_states, attention_mask, head_mask)
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, metadata_hidden_states=None):
+        attention_outputs = self.attention(hidden_states, attention_mask, head_mask, metadata_hidden_states)
         attention_output = attention_outputs[0]
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
@@ -347,14 +350,14 @@ class BertEncoder(nn.Module):
         self.output_hidden_states = config.output_hidden_states
         self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None):
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, metadata_hidden_states=None):
         all_hidden_states = ()
         all_attentions = ()
         for i, layer_module in enumerate(self.layer):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = layer_module(hidden_states, attention_mask, head_mask[i])
+            layer_outputs = layer_module(hidden_states, attention_mask, head_mask[i], metadata_hidden_states)
             hidden_states = layer_outputs[0]
 
             if self.output_attentions:
@@ -596,11 +599,15 @@ class BertModel(BertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None):
+    def forward(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, metadata_ids=None):
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
         if token_type_ids is None:
             token_type_ids = torch.zeros_like(input_ids)
+        if metadata_ids is not None:
+            metadata_token_type_ids = torch.zeros_like(metadata_ids)
+        else:
+            metadata_token_type_ids = None
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
@@ -635,9 +642,16 @@ class BertModel(BertPreTrainedModel):
             head_mask = [None] * self.config.num_hidden_layers
 
         embedding_output = self.embeddings(input_ids, position_ids=position_ids, token_type_ids=token_type_ids)
-        encoder_outputs = self.encoder(embedding_output,
-                                       extended_attention_mask,
-                                       head_mask=head_mask)
+        if metadata_token_type_ids is not None:
+            metadata_embedding_output = self.embeddings(metadata_token_type_ids, position_ids=None, token_type_ids=metadata_token_type_ids)
+            encoder_outputs = self.encoder(embedding_output,
+                                           extended_attention_mask,
+                                           head_mask=head_mask,
+                                           metadata_hidden_states=metadata_embedding_output)
+        else:
+            encoder_outputs = self.encoder(embedding_output,
+                                           extended_attention_mask,
+                                           head_mask=head_mask)
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
 

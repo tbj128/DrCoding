@@ -8,7 +8,7 @@ Pencheng Yin <pcyin@cs.cmu.edu>
 Sahil Chopra <schopra8@stanford.edu>
 Vera Lin <veralin@stanford.edu>
 """
-
+import csv
 import math
 import pandas as pd
 import numpy as np
@@ -56,7 +56,7 @@ def create_embedding_from_glove(glove_path, vocab, device):
     return emb_layer, num_embeddings, embedding_dim
 
 
-def read_source_text_for_bert(file_path, labels, tokenizer, target_length=1000):
+def read_source_text_for_bert(file_path, tokenizer, target_length=1000):
     examples = []
     icds = []
     source_lengths = []
@@ -72,10 +72,48 @@ def read_source_text_for_bert(file_path, labels, tokenizer, target_length=1000):
         length = len(sent)
         source_lengths.append(length)
 
-        examples.append(InputExample(guid=hadmid, text_a=line, labels=row_icds))
-    features = convert_examples_to_features(examples, labels, target_length, tokenizer)
+        examples.append(InputExample(guid=hadmid, text=line))
+    features = convert_examples_to_features(examples, target_length, tokenizer)
     return features, source_lengths, icds
 
+
+def read_source_text_for_bert_with_metadata(file_path, metadata_file_path, tokenizer, target_length=1000):
+
+    hadmid_to_metadata = {}
+    with open(metadata_file_path, 'r') as f:
+        metadata_tsv = csv.reader(f, delimiter='\t')
+        i = 0
+        for row in metadata_tsv:
+            hadmid = int(row[0])
+            descriptions = " ".join(row[1:])
+            hadmid_to_metadata[hadmid] = descriptions
+            i += 1
+
+    examples = []
+    icds = []
+    source_lengths = []
+    data_df = pd.read_csv(file_path, header=None)
+    for (i, row) in enumerate(data_df.values):
+        hadmid = row[0]
+        line = row[1]
+        row_icds = row[2:]
+        row_icd_descriptions = hadmid_to_metadata[hadmid]
+
+        if i == 0:
+            print("Input example: {} {} {} {}".format(hadmid, line[0:100], row_icds, row_icd_descriptions))
+
+        icds.append(row_icds)
+
+        sent = line.split(" ")
+        length = len(sent)
+        source_lengths.append(length)
+
+        examples.append(InputExample(guid=hadmid, text=line, metadata_text=row_icd_descriptions))
+
+    # The max metadata length is set to be the same as the target length. Although the metadata length is
+    # usually much smaller than the target length, the target needs to be passed during test time.
+    features = convert_examples_to_features(examples, target_length, tokenizer, target_length)
+    return features, source_lengths, icds
 
 def read_source_text(file_path, target_length=1000, pad_token='<pad>', use_cls=False):
     """

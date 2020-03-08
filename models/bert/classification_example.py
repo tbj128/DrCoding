@@ -13,7 +13,7 @@ from transformers import AdamW
 from transformers import BertTokenizer
 
 from bert.bert_multilabel_seq_classification import BertForMultiLabelSequenceClassification
-from bert.bert_utils import MultiLabelTextProcessor, convert_examples_to_features
+from bert.original_bert_utils import MultiLabelTextProcessor, convert_examples_to_features
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
