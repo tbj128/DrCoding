@@ -97,6 +97,8 @@ def convert_examples_to_features(examples, max_seq_length, tokenizer, max_metada
         input_mask_text += padding_text
         segment_ids += padding_text
 
+        input_ids_metadata_text = None
+        input_mask_metadata_text = None
         if tokens_metadata_text:
             input_ids_metadata_text = tokenizer.convert_tokens_to_ids(tokens_metadata_text)
             input_mask_metadata_text = [1] * len(input_ids_metadata_text)

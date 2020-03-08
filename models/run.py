@@ -259,10 +259,10 @@ def train(args: Dict):
             nhead=int(args['--transformer-heads'])
         )
     elif model_type == "bert":
-        model = BertClassifier.from_pretrained(args['--base-bert-path'])
+        model = BertClassifier.from_pretrained(args['--base-bert-path'], num_labels=len(vocab.icd))
         model.unfreeze_bert_encoder()
     elif model_type == "bert-metadata":
-        model = BertClassifierWithMetadata.from_pretrained(args['--base-bert-path'])
+        model = BertClassifierWithMetadata.from_pretrained(args['--base-bert-path'], num_labels=len(vocab.icd))
         model.unfreeze_bert_encoder()
     else:
         raise NotImplementedError("Invalid model type")
@@ -325,6 +325,13 @@ def train(args: Dict):
 
             batch_icd_codes = torch.tensor(batch_icd_codes, dtype=torch.float, device=device)
             example_losses = lossFunc(model_output, batch_icd_codes)
+
+
+            loss_fct = nn.BCEWithLogitsLoss()
+            l = loss_fct(model_output.view(-1, 50), batch_icd_codes.view(-1, 50))
+            print("Loss is {}".format(l))
+
+
             batch_loss = example_losses.sum()
             loss = batch_loss / batch_size
 

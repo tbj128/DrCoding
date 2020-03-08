@@ -39,8 +39,8 @@ args = {
     "do_train": True,
     "do_eval": True,
     "do_lower_case": True,
-    "train_batch_size": 32,
-    "eval_batch_size": 32,
+    "train_batch_size": 4,
+    "eval_batch_size": 4,
     "learning_rate": 3e-5,
     "num_train_epochs": 4.0,
     "warmup_proportion": 0.1,
@@ -276,6 +276,7 @@ def fit(num_epocs=args['num_train_epochs']):
             batch = tuple(t.to(device) for t in batch)
             input_ids, input_mask, segment_ids, label_ids = batch
             loss = model(input_ids, segment_ids, input_mask, label_ids)
+            print("Loss is {} ", loss.item())
             if n_gpu > 1:
                 loss = loss.mean() # mean() to average on multi-gpu.
             if args['gradient_accumulation_steps'] > 1:
