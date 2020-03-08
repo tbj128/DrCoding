@@ -84,6 +84,12 @@ class ICDVocab(object):
             data.append(self.icd2id[icd_row])
         return torch.tensor(data, dtype=torch.long, device=device)
 
+    def get_labels_in_order(self):
+        labels = []
+        for k, v in sorted(self.icd2id.items(), key=lambda e: e[1]):
+            labels.append(k)
+        return labels
+
     def to_one_hot(self, icds, device):
         """
 

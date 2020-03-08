@@ -16,6 +16,7 @@ import torch.nn as nn
 import torch
 # import nltk
 # nltk.download('punkt')
+from bert.bert_utils import convert_examples_to_features, InputExample
 
 
 def create_embedding_from_glove(glove_path, vocab, device):
@@ -53,6 +54,27 @@ def create_embedding_from_glove(glove_path, vocab, device):
     emb_layer.weight.requires_grad = True
 
     return emb_layer, num_embeddings, embedding_dim
+
+
+def read_source_text_for_bert(file_path, labels, tokenizer, target_length=1000):
+    examples = []
+    icds = []
+    source_lengths = []
+    data_df = pd.read_csv(file_path, header=None)
+    for (i, row) in enumerate(data_df.values):
+        hadmid = row[0]
+        line = row[1]
+        row_icds = row[2:]
+
+        icds.append(row_icds)
+
+        sent = line.split(" ")
+        length = len(sent)
+        source_lengths.append(length)
+
+        examples.append(InputExample(guid=hadmid, text_a=line, labels=row_icds))
+    features = convert_examples_to_features(examples, labels, target_length, tokenizer)
+    return features, source_lengths, icds
 
 
 def read_source_text(file_path, target_length=1000, pad_token='<pad>', use_cls=False):
