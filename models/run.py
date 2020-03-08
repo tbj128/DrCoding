@@ -308,15 +308,15 @@ def train(args: Dict):
             orig_train_batch = zip(batch_src_text, batch_src_lengths, batch_icd_codes)
 
             if args['--model'] == "bert":
-                input_ids = torch.tensor([f.input_ids for f in batch_src_text], dtype=torch.long)
-                input_mask = torch.tensor([f.input_mask for f in batch_src_text], dtype=torch.long)
-                segment_ids = torch.tensor([f.segment_ids for f in batch_src_text], dtype=torch.long)
+                input_ids = torch.tensor([f.input_ids for f in batch_src_text], dtype=torch.long, device=device)
+                input_mask = torch.tensor([f.input_mask for f in batch_src_text], dtype=torch.long, device=device)
+                segment_ids = torch.tensor([f.segment_ids for f in batch_src_text], dtype=torch.long, device=device)
                 model_output = model(input_ids, segment_ids, input_mask)
             elif args['--model'] == "bert-metadata":
-                input_ids = torch.tensor([f.input_ids for f in batch_src_text], dtype=torch.long)
-                input_mask = torch.tensor([f.input_mask for f in batch_src_text], dtype=torch.long)
-                segment_ids = torch.tensor([f.segment_ids for f in batch_src_text], dtype=torch.long)
-                input_ids_metadata = torch.tensor([f.input_ids_metadata for f in batch_src_text], dtype=torch.long)
+                input_ids = torch.tensor([f.input_ids for f in batch_src_text], dtype=torch.long, device=device)
+                input_mask = torch.tensor([f.input_mask for f in batch_src_text], dtype=torch.long, device=device)
+                segment_ids = torch.tensor([f.segment_ids for f in batch_src_text], dtype=torch.long, device=device)
+                input_ids_metadata = torch.tensor([f.input_ids_metadata for f in batch_src_text], dtype=torch.long, device=device)
                 model_output = model(input_ids, segment_ids, input_mask, metadata_input_ids=input_ids_metadata)
             else:
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(batch_src_text, device)
