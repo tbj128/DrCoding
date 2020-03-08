@@ -442,8 +442,26 @@ def train(args: Dict):
 
 def predict_icd_codes(args: Dict[str, str]):
     print("load test source sentences from [{}]".format(args['TEST_SOURCE_FILE']), file=sys.stderr)
-    use_cls = args["--model"] != "baseline"
-    test_source_text, test_source_lengths, test_icd_codes = read_source_text(args['TEST_SOURCE_FILE'], target_length=int(args["--target-length"]), use_cls=use_cls)
+    model_type = args["--model"]
+    use_cls = model_type != "baseline"
+
+
+    if model_type == "bert":
+        tokenizer = BertTokenizer.from_pretrained(args['--base-bert-path'])
+        test_source_text, test_source_lengths, test_icd_codes = read_source_text_for_bert(
+            file_path=args['TEST_SOURCE_FILE'],
+            target_length=int(args['--target-length']),
+            tokenizer=tokenizer)
+    elif model_type == "bert-metadata":
+        tokenizer = BertTokenizer.from_pretrained(args['--base-bert-path'])
+        test_source_text, test_source_lengths, test_icd_codes = read_source_text_for_bert_with_metadata(
+            file_path=args['TEST_SOURCE_FILE'],
+            target_length=int(args['--target-length']),
+            tokenizer=tokenizer,
+            metadata_file_path=args['--icd-desc-file']
+        )
+    else:
+        test_source_text, test_source_lengths, test_icd_codes = read_source_text(args['TEST_SOURCE_FILE'], target_length=int(args["--target-length"]), use_cls=use_cls)
     test_data = list(zip(test_source_text, test_source_lengths, test_icd_codes))
 
     print("load model from {}".format(args['MODEL_PATH']), file=sys.stderr)
