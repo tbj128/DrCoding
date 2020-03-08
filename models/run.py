@@ -118,6 +118,12 @@ def predict_output(args, model, dev_data, device,  thresh: float = 0.3, batch_si
                 input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long)
                 segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long)
                 model_out = model(input_ids, segment_ids, input_mask)
+            elif args['--model'] == "bert-metadata":
+                input_ids = torch.tensor([f.input_ids for f in src_text], dtype=torch.long)
+                input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long)
+                segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long)
+                input_ids_metadata = torch.tensor([f.input_ids_metadata for f in src_text], dtype=torch.long)
+                model_out = model(input_ids, segment_ids, input_mask, metadata_input_ids=input_ids_metadata)
             else:
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
                 batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)

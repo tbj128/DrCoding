@@ -57,7 +57,7 @@ class DischargeLSTM(nn.Module):
         """
 
         embeddings = self.embeddings(discharge_padded)
-        discharge_padded_packed = nn.utils.rnn.pack_padded_sequence(embeddings, source_lengths, batch_first=True)
+        discharge_padded_packed = nn.utils.rnn.pack_padded_sequence(embeddings, source_lengths, batch_first=True, enforce_sorted=False)
         output_state, hidden_and_cell = self.lstm(discharge_padded_packed)
         final_hidden, final_cell = hidden_and_cell # (2, batch_size, embed_size)
         final_hidden = final_hidden.permute(1, 0, 2).contiguous() # (batch_size, 2, embed_size)
