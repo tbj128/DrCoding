@@ -50,13 +50,13 @@ class BertClassifier(BertPreTrainedModel):
         torch.save(model_to_save.state_dict(), path)
 
     @staticmethod
-    def load(model_path: str, bert_pretrained_path: str):
+    def load(model_path: str, bert_pretrained_path: str, num_labels: int):
         """ Load a fine-tuned model from a file.
         @param model_path (str): path to model
         """
 
         state_dict = torch.load(model_path)
-        model = BertClassifier.from_pretrained(bert_pretrained_path, state_dict=state_dict, num_labels=state_dict["num_labels"])
+        model = BertClassifier.from_pretrained(bert_pretrained_path, state_dict=state_dict, num_labels=num_labels)
         return model
 
 
@@ -94,12 +94,12 @@ class BertClassifierWithMetadata(BertPreTrainedModel):
         torch.save(model_to_save.state_dict(), path)
 
     @staticmethod
-    def load(model_path: str, bert_pretrained_path: int):
+    def load(model_path: str, bert_pretrained_path: str, num_labels: int):
         """ Load a fine-tuned model from a file.
         @param model_path (str): path to model
         """
 
         state_dict = torch.load(model_path)
-        model = BertClassifierWithMetadata.from_pretrained(bert_pretrained_path, state_dict=state_dict)
+        model = BertClassifierWithMetadata.from_pretrained(bert_pretrained_path, state_dict=state_dict, num_labels=num_labels)
         return model
 
