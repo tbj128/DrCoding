@@ -324,14 +324,14 @@ def train(args: Dict):
                 model_output = model(batch_src_text_tensor, batch_src_lengths)
 
             batch_icd_codes = torch.tensor(batch_icd_codes, dtype=torch.float, device=device)
-            example_losses = lossFunc(model_output, batch_icd_codes)
+            # example_losses = lossFunc(model_output, batch_icd_codes)
+            # batch_loss = example_losses.sum()
+            # loss = batch_loss / batch_size
 
-            # loss_fct = nn.BCEWithLogitsLoss()
-            # loss = loss_fct(model_output.view(-1, 50), batch_icd_codes.view(-1, 50))
-            # print("Loss is {}".format(l))
-
-            batch_loss = example_losses.sum()
-            loss = batch_loss / batch_size
+            loss_fct = nn.BCEWithLogitsLoss()
+            loss = loss_fct(model_output.view(-1, len(vocab.icd)), batch_icd_codes.view(-1, len(vocab.icd)))
+            batch_loss = loss
+            print("Loss is {}".format(loss))
 
             if args['--verbose']:
                 print("  > epoch {} iter {} loss {}".format(epoch, train_iter, loss.item()))
@@ -360,13 +360,13 @@ def train(args: Dict):
             if train_iter % log_every == 0:
                 print('epoch %d, iter %d, avg. loss %.2f ' \
                       'total examples %d, speed %.2f words/sec, time elapsed %.2f sec' % (epoch, train_iter,
-                                                                                         total_loss / total_examples,
+                                                                                         total_loss,
                                                                                          total_examples,
                                                                                          total_processed_words / (time.time() - train_time),
                                                                                          time.time() - begin_time), file=sys.stderr)
                 logger.info('epoch %d, iter %d, avg. loss %.2f ' \
                       'total examples %d, speed %.2f words/sec, time elapsed %.2f sec' % (epoch, train_iter,
-                                                                                         total_loss / total_examples,
+                                                                                         total_loss,
                                                                                          total_examples,
                                                                                          total_processed_words / (time.time() - train_time),
                                                                                          time.time() - begin_time))
@@ -418,7 +418,10 @@ def train(args: Dict):
 
                         # load model
                         params = torch.load(model_save_path, map_location=lambda storage, loc: storage)
-                        model.load_state_dict(params['state_dict'])
+                        if model_type == "bert" or model_type == "bert-metadata":
+                            model.load_state_dict(params)
+                        else:
+                            model.load_state_dict(params['state_dict'])
                         model = model.to(device)
 
                         print('restore parameters of the optimizers', file=sys.stderr)
