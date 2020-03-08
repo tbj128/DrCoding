@@ -56,7 +56,7 @@ class BertClassifier(BertPreTrainedModel):
         """
 
         state_dict = torch.load(model_path)
-        model = BertClassifier.from_pretrained(bert_pretrained_path, state_dict=state_dict)
+        model = BertClassifier.from_pretrained(bert_pretrained_path, state_dict=state_dict, num_labels=state_dict["num_labels"])
         return model
 
 
