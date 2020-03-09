@@ -69,7 +69,7 @@ class ReformerClassifier(nn.Module):
 
         # hidden_state = torch.sum(hidden_state, dim=1) / torch.sum(mask == False, dim=1).unsqueeze(1)
         hidden_state = hidden_state * (~mask).type(torch.float).unsqueeze(2)
-        pooled_output = torch.sum(hidden_state, dim=1) / torch.sum(mask == False, dim=1).unsqueeze(1)
+        pooled_output = torch.sum(hidden_state, dim=1) / torch.sum(mask == False, dim=1).type(torch.float).unsqueeze(1)
 
         pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
         pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)

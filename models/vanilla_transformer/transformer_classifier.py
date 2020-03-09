@@ -54,7 +54,7 @@ class TransformerClassifier(nn.Module):
         # output = output[0, :, :].squeeze()  # (bs, ninp) - we take the first character (the CLS token)
 
         hidden_state = hidden_state * (~mask).type(torch.float).transpose(0, 1).unsqueeze(2)
-        hidden_state = torch.sum(hidden_state, dim=0) / torch.sum(mask == False, dim=1).unsqueeze(1)
+        hidden_state = torch.sum(hidden_state, dim=0) / torch.sum(mask == False, dim=1).type(torch.float).unsqueeze(1)
 
         pooled_output = self.pre_classifier(hidden_state)  # (bs, dim)
         pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)
