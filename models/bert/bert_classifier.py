@@ -1,3 +1,7 @@
+"""
+Customized BERT-based classifiers for DrCoding
+"""
+
 import sys
 
 import random
@@ -18,6 +22,9 @@ from utils import create_embedding_from_glove
 
 
 class BertClassifier(BertPreTrainedModel):
+    """
+    BERT multi-label classifier
+    """
     def __init__(self, config):
         super(BertClassifier, self).__init__(config)
         self.bert = BertModel(config)
@@ -26,6 +33,13 @@ class BertClassifier(BertPreTrainedModel):
         self.init_weights()
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None):
+        """
+        Forward pass of the BERT classifier
+        :param input_ids: the input IDs (bs, seq len)
+        :param token_type_ids: (not used) a tensor of zeros indicating which sequence in sequence pairs (bs, seq len)
+        :param attention_mask: tensor of one if not pad token, zero otherwise (bs, seq len)
+        :return: logits corresponding to each output class (bs, )
+        """
         _, pooled_output = self.bert(
             input_ids=input_ids,
             token_type_ids=token_type_ids,
@@ -35,10 +49,16 @@ class BertClassifier(BertPreTrainedModel):
         return self.classifier(pooled_output)
 
     def freeze_bert_encoder(self):
+        """
+        Prevents further backpropagation (used when testing)
+        """
         for param in self.bert.parameters():
             param.requires_grad = False
 
     def unfreeze_bert_encoder(self):
+        """
+        Re-enables backpropagation (used when training)
+        """
         for param in self.bert.parameters():
             param.requires_grad = True
 

@@ -4,7 +4,7 @@
 """
 DrCoding | Input manipulation for the MIMIC-III ICD-9 prediction task
 
-Converts the input text to token indices.
+Converts the input text and ICD codes to token indices.
 Adapted from the `vocab.py` file in the CS224N assignments.
 
 

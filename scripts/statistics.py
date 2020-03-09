@@ -1,6 +1,6 @@
 """
 DrCoding
-Statistics
+Calculates statistics of the discharge notes and ICD code files
 
 Tom Jin <tomjin@stanford.edu>
 

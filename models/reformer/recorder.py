@@ -1,3 +1,7 @@
+#
+# Forked from: https://github.com/lucidrains/reformer-pytorch
+#
+
 from torch import nn
 from reformer.reformer_pytorch import LSHAttention, LSHSelfAttention
 from collections import defaultdict

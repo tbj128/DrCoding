@@ -1,4 +1,7 @@
-# Adapted from https://github.com/google-research/bert/blob/master/extract_features.py
+# Adapted from: https://github.com/google-research/bert/blob/master/extract_features.py
+# NOTES:
+# - Updated the Input classes to hold sample metadata
+# - Updated the conversion method to handle and extract sample metadata
 
 # coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors.

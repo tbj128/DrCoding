@@ -1,7 +1,4 @@
-"""
-Adapted from HuggingFace to incorporate the metadata attention scheme
-"""
-
+# Adapted from HuggingFace to incorporate the metadata attention scheme
 
 # coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.

@@ -1,3 +1,7 @@
+#
+# Forked from: https://github.com/lucidrains/reformer-pytorch
+#
+
 import math
 from torch import nn
 import torch.nn.functional as F

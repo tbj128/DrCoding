@@ -1,4 +1,4 @@
-# Adapted from https://github.com/google-research/bert/blob/master/extract_features.py
+# Adapted from: https://github.com/google-research/bert/blob/master/extract_features.py
 
 # coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors.
@@ -85,11 +85,9 @@ class MultiLabelTextProcessor(DataProcessor):
         logger.info("LOOKING AT {}".format(os.path.join(data_dir, filename)))
         if size == -1:
             data_df = pd.read_csv(os.path.join(data_dir, filename))
-            #             data_df['comment_text'] = data_df['comment_text'].apply(cleanHtml)
             return self._create_examples(data_df, "train")
         else:
             data_df = pd.read_csv(os.path.join(data_dir, filename))
-            #             data_df['comment_text'] = data_df['comment_text'].apply(cleanHtml)
             return self._create_examples(data_df.sample(size), "train")
 
     def get_dev_examples(self, data_dir, size=-1):
@@ -97,16 +95,13 @@ class MultiLabelTextProcessor(DataProcessor):
         filename = 'dev.tiny.data'
         if size == -1:
             data_df = pd.read_csv(os.path.join(data_dir, filename))
-            #             data_df['comment_text'] = data_df['comment_text'].apply(cleanHtml)
             return self._create_examples(data_df, "dev")
         else:
             data_df = pd.read_csv(os.path.join(data_dir, filename))
-            #             data_df['comment_text'] = data_df['comment_text'].apply(cleanHtml)
             return self._create_examples(data_df.sample(size), "dev")
 
     def get_test_examples(self, data_dir, data_file_name, size=-1):
         data_df = pd.read_csv(os.path.join(data_dir, data_file_name), escapechar='"', quoting=3, error_bad_lines=False)
-        #         data_df['comment_text'] = data_df['comment_text'].apply(cleanHtml)
         if size == -1:
             return self._create_examples(data_df, "test")
         else:
@@ -199,7 +194,6 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
         for label in example.labels:
             labels_ids.append(float(label))
 
-        #         label_id = label_map[example.label]
         if ex_index < 0:
             logger.info("*** Example ***")
             logger.info("guid: %s" % (example.guid))

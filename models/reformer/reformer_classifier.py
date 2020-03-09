@@ -17,17 +17,22 @@ from torch.utils.data import DataLoader, Dataset
 from vocab import Vocab
 from utils import read_source_text
 
-# instantiate model
-
-def default(val, default_val):
-    return default_val if val is None else val
-
-def identity(x):
-    return x
-
 class ReformerClassifier(nn.Module):
+    """
+    Custom classifier built on top of the Reformer model. Alternative, smaller memory-footprint model when compared
+    to the Transformer model
+    """
+
     def __init__(self, vocab, embed_size, depth, max_seq_len, use_metadata = False, num_heads = 8, bucket_size = 64, n_hashes = 4, ff_chunks = 100, attn_chunks = None, causal = False, weight_tie = False, lsh_dropout = 0.1, layer_dropout = 0.1, random_rotations_per_head = False, twin_attention = False, use_scale_norm = False, use_full_attn = False, full_attn_thres = 0, num_mem_kv = 0):
         """
+        Constructor
+        :vocab: vocab object
+        :embed_size: size of the word embeddings
+        :depth: the number of layers in the Reformer model
+        :max_seq_len: the length of the input sequence
+        :use_metadata: True if the ICD descriptions should be used as part of the attention scheme, False otherwise
+
+        See the the Reformer class for additional parameter descriptions
         """
         super().__init__()
         self.vocab = vocab
@@ -78,8 +83,21 @@ class ReformerClassifier(nn.Module):
         self.dropout = nn.Dropout(0.1)
 
     def forward(self, src, source_lengths, metadata_ids=None, **kwargs):
+        """
+        The forward pass of the Reformer classifier
+        :param src: the padded input text (bs, seq len)
+        :param source_lengths: the lengths of the original input text (bs, 1)
+        :param metadata_ids: the metadata text, requried if self.use_metadata is set to True (bs, seq len)
+        :return: logits of the Transformer (bs, num_output_classes)
+        """
         mask = (src == self.vocab.discharge.pad_token) # (batch size, seq length)
         src = self.encoder(src)
+
+        #
+        # Uncomment below if we want to use the positional encoding
+        # Empirical evidence suggests position encoding does not
+        # perform as well in sequence classification problems
+        #
         # src = self.encoder(src) * math.sqrt(self.embed_size)
         # src = self.pos_encoder(src)
 
@@ -89,16 +107,20 @@ class ReformerClassifier(nn.Module):
         else:
             hidden_state = self.reformer(src, input_mask=mask)  # (bs, seq length, dim)
 
+        #
+        # Uncomment below if we want to use the CLS token to perform classification
+        # Testing shows that the CLS token does not perform as well as if we had
+        # took the mean over the hidden states
+        #
         # pooled_output = hidden_state[:, 0, :].squeeze()  # (bs, dim) - we take the first character (the CLS token)
 
-        # hidden_state = torch.sum(hidden_state, dim=1) / torch.sum(mask == False, dim=1).unsqueeze(1)
         hidden_state = hidden_state * (~mask).type(torch.float).unsqueeze(2)
         pooled_output = torch.sum(hidden_state, dim=1) / torch.sum(mask == False, dim=1).type(torch.float).unsqueeze(1)
 
         pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
         pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)
         pooled_output = self.dropout(pooled_output)  # (bs, dim)
-        logits = self.classifier(pooled_output)  # (bs, dim)
+        logits = self.classifier(pooled_output)  # (bs, num_output_classes)
 
         return logits
 

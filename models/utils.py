@@ -2,11 +2,10 @@
 # -*- coding: utf-8 -*-
 
 """
-CS224N 2019-20: Homework 4
-nmt.py: NMT Model
-Pencheng Yin <pcyin@cs.cmu.edu>
-Sahil Chopra <schopra8@stanford.edu>
-Vera Lin <veralin@stanford.edu>
+DrCoding | Input manipulation for the MIMIC-III ICD-9 prediction task
+
+Utilities to read and iterate over the input files
+
 """
 import csv
 import math
@@ -20,6 +19,13 @@ from bert.bert_utils import convert_examples_to_features, InputExample
 
 
 def create_embedding_from_glove(glove_path, vocab, device):
+    """
+    Creates an embedding model based on a pre-trained GLOVE embedding file
+    :param glove_path: the path to the GLOVE model
+    :param vocab: the vocab
+    :param device: the Torch device
+    :return: emb_layer, num_embeddings, embedding_dim
+    """
     print("Creating embedding from GLOVE...")
     glove = {}
     embed_size = 0
@@ -57,6 +63,17 @@ def create_embedding_from_glove(glove_path, vocab, device):
 
 
 def read_source_text_for_bert_with_metadata(file_path, tokenizer, metadata_file_path=None, target_length=1000):
+    """
+    Read the input discharge summaries, but massage the data into a model that can be more easily
+    passed to the HuggingFace transformer
+
+    Take the last target_length number of words
+
+    @param file_path (str): path to file containing discharge summaries
+    @param tokenizer (str): the BERT tokenizer
+    @param metadata_file_path (str): path to file containing descriptions of the ICD codes for each discharge summaries
+    @param target_length (str): the length that the sentence should be
+    """
 
     hadmid_to_metadata = {}
     if metadata_file_path is not None and metadata_file_path != "NONE":
@@ -108,8 +125,10 @@ def read_source_text_for_bert_with_metadata(file_path, tokenizer, metadata_file_
 def read_source_text(file_path, metadata_file_path, target_length=1000, pad_token='<pad>', use_cls=False):
     """
     Read the input discharge summaries.
-    Take the first target_length number of words or pad with pad_token if the summary is less than the target_length
+    Take the last target_length number of words or pad with pad_token if the summary is less than the target_length
+
     @param file_path (str): path to file containing discharge summaries
+    @param metadata_file_path (str): path to file containing descriptions of the ICD codes for each discharge summaries
     @param target_length (str): the length that the sentence should be
     @param pad_token (str): the padding token
     @param use_cls (bool): true if we should add a classification token

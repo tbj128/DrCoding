@@ -1,3 +1,7 @@
+#
+# Forked from: https://github.com/lucidrains/reformer-pytorch
+#
+
 from functools import partial
 import torch
 from torch import nn

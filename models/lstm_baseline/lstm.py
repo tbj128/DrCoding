@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 
 """
-DrCoding | LSTM baseline model for the MIMIC-III ICD-9 prediction task
+DrCoding
+LSTM baseline model for the MIMIC-III ICD-9 prediction task
 """
 import sys
 from typing import List
@@ -18,14 +19,13 @@ from utils import create_embedding_from_glove
 class DischargeLSTM(nn.Module):
     def __init__(self, vocab, hidden_size, dropout_rate, embed_size, device, glove_path=None):
         """
-
         Bidrectional LSTM Multi-Label Classifier with Glove embeddings
-        :param vocab:
-        :param hidden_size:
-        :param dropout_rate:
-        :param num_output_classes:
-        :param embed_size:
-        :param glove_path:
+        :param vocab: the vocab object
+        :param hidden_size: the hidden size of the LSTM
+        :param dropout_rate: the dropout to apply after the LSTM
+        :param num_output_classes: the number of ICDs to predict
+        :param embed_size: the size of the word embeddings
+        :param glove_path: the path to the GLOVE file
         """
 
         super(DischargeLSTM, self).__init__()
@@ -52,8 +52,9 @@ class DischargeLSTM(nn.Module):
     def forward(self, discharge_padded, source_lengths):
         """
         Forward pass of the LSTM with a linear layer
-        :param discharge_padded: minibatch of discharge notes (batch_size, max_discharge_size)
-        :return:
+        :param discharge_padded: the padded discharge summaries (bs, seq length)
+        :param source_lengths: the actual, original discharge summaries length (bs)
+        :return: logits after applying the model (bs, num_output_classes)
         """
 
         embeddings = self.embeddings(discharge_padded)
@@ -68,7 +69,8 @@ class DischargeLSTM(nn.Module):
 
     @staticmethod
     def load(model_path: str):
-        """ Load the model from a file.
+        """
+        Load the model from a file.
         @param model_path (str): path to model
         """
         params = torch.load(model_path, map_location=lambda storage, loc: storage)

@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 
 """
+DrCoding: Predicting ICD-9 Codes from Discharge Summaries
+
+Partially adapted from the run.py from CS224N Assignment 5
 
 Usage:
     run.py train --train-src=<file> --dev-src=<file> --vocab=<file> [options]
@@ -55,7 +58,6 @@ from tqdm import tqdm
 from transformers import BertTokenizer
 
 from bert.bert_classifier import BertClassifier, BertClassifierWithMetadata
-from linear.linear import TextSentiment
 from lstm_baseline.lstm import DischargeLSTM
 from reformer.reformer_classifier import ReformerClassifier
 from utils import batch_iter, read_source_text, read_source_text_for_bert_with_metadata
@@ -92,6 +94,9 @@ logger.info('Starting run.py')
 def evaluate_scores(references: List[List[str]], predicted: List[List[str]]):
     """
     Given set of references and predicted ICD codes, return the precision, recall, f1, and accuracy statistics
+    :param references: list of list of ICD code IDs
+    :param predicted: list of list of ICD code IDs
+    :return: precision, recall, f1, accuracy (averaged across all samples)
     """
     assert len(references) == len(predicted)
 
@@ -104,12 +109,20 @@ def evaluate_scores(references: List[List[str]], predicted: List[List[str]]):
         precision += precision_score(references[i], predicted[i])
         recall += recall_score(references[i], predicted[i])
         accuracy += accuracy_score(references[i], predicted[i])
-        # print(micro_f1(np.array(references[i]), np.array(predicted[i])))
 
     return precision / len(references), recall / len(references), f1 / len(references), accuracy / len(references)
 
 
-def predict_output(args, model, dev_data, device, batch_size=32, is_test=False):
+def predict_output(args, model, dev_data, device, batch_size=32):
+    """
+    Applies the provided model to the test data
+    :param args: the input arguments
+    :param model: the pre-trained model
+    :param dev_data: zipped collection of discharge notes, ICD codes, ICD descriptions
+    :param device: the torch device
+    :param batch_size: the batch size to use
+    :return: preds (the model-predicted ICD codes), icds (the actual ICD codes)
+    """
     thresh = float(args['--threshold'])
     preds = []
     icds = []
@@ -147,31 +160,19 @@ def predict_output(args, model, dev_data, device, batch_size=32, is_test=False):
                 icds.append(list(actual_icd_one_hot))
 
             completed += len(src_text)
-            if is_test:
-                print("   > Completed {}/{}".format(completed, len(dev_data)), end='\r', flush=True)
-
-    # y_pred = torch.tensor(preds)
-    # y_true = torch.tensor(icds)
-    # print("Accuracy {}".format(np.mean(((y_pred>thresh)==y_true.byte()).float().cpu().numpy(), axis=1).sum()))
+            print("Completed {}/{}".format(completed, len(dev_data)))
 
     return preds, icds
 
 
 def evaluate_model_with_dev(args, model, dev_data, device, batch_size=32):
     """
-
+    Evaluate the model and return the precision, recall, f1 and accuracy metrics
     """
     was_training = model.training
     model.eval()
 
-    # no_grad() signals backend to throw away all gradients
-    preds, icds = predict_output(args, model, dev_data, device, batch_size=batch_size, is_test=False)
-
-    # print("-----------------------")
-    # print("Preds {}".format(preds))
-    # print("Actual {}".format(icds))
-    # print("-----------------------")
-
+    preds, icds = predict_output(args, model, dev_data, device, batch_size=batch_size)
     precision, recall, f1, accuracy = evaluate_scores(icds, preds)
 
     if was_training:
@@ -180,14 +181,18 @@ def evaluate_model_with_dev(args, model, dev_data, device, batch_size=32):
     return precision, recall, f1, accuracy
 
 
-def train(args: Dict):
+def train(args):
     """
-    Train the baseline LSTM model
-    @param args (Dict): args from cmd line
+    Train the model with the training data
+    :param args: the args from the command line
     """
 
     vocab = Vocab.load(args['--vocab'])
     model_type = args['--model']
+
+    # Change the below flag if we want to inject a 'CLS' token when parsing the input
+    # Note that this is done automatically if using the BERT tokenizer
+    # Also note that 'CLS' tokens do not work very well with the Reformer model
     use_cls = False
 
     if model_type == "bert":
@@ -253,9 +258,10 @@ def train(args: Dict):
             layer_dropout=float(args['--dropout']),
             weight_tie=True,
             causal=True,
-            use_full_attn=False # set this to true for comparison with full attention
+            use_full_attn=False
         )
     elif model_type == "reformer-metadata":
+        # Use a forked version of the Reformer model that uses metadata from the ICD codes during attention
         model = ReformerClassifier(
             vocab=vocab,
             embed_size=int(args['--word-embed-size']),
@@ -295,6 +301,7 @@ def train(args: Dict):
     model.train()
 
     if model_type != "bert" and model_type != "bert-metadata":
+        # We are pre-loading weights from the BERT models so no need to set our random weights
         uniform_init = float(args['--uniform-init'])
         if np.abs(uniform_init) > 0.:
             print('uniformly initialize parameters [-%f, +%f]' % (uniform_init, uniform_init), file=sys.stderr)
@@ -305,7 +312,6 @@ def train(args: Dict):
 
     model = model.to(device)
 
-    lossFunc = nn.BCEWithLogitsLoss(reduction='sum') # Use BCEWithLogitsLoss for multi-label prediction
     optimizer = torch.optim.Adam(model.parameters(), lr=float(args['--lr']))
 
     num_trial = 0
@@ -396,7 +402,7 @@ def train(args: Dict):
                 train_time = time.time()
                 total_examples = total_loss = total_processed_words = 0.
 
-            # perform validation
+            # Perform validation at the pre-configured rate, or if we have reached the maximum number of epochs
             if train_iter % valid_niter == 0 or epoch == int(args['--max-epoch']):
                 precision, recall, f1, accuracy = evaluate_model_with_dev(args, model, dev_data, device, batch_size=int(args["--batch-size"]))   # dev batch size can be a bit larger
                 valid_metric = f1
@@ -457,8 +463,15 @@ def train(args: Dict):
                 exit(0)
 
 def predict_icd_codes(args: Dict[str, str]):
+    """
+    Freezes the model and predicts the ICD codes. Writes the evaluation scores to console and writes predictions to file
+    :param args: the command line arguments
+    """
     print("load test source sentences from [{}]".format(args['TEST_SOURCE_FILE']), file=sys.stderr)
     model_type = args["--model"]
+
+    # Set to True if we want to inject a 'CLS' token as part of the input
+    # Recommended to use False
     use_cls = False
 
     vocab = Vocab.load(args['--vocab-test'])
@@ -508,7 +521,7 @@ def predict_icd_codes(args: Dict[str, str]):
     device = torch.device("cuda:0" if args['--cuda'] else "cpu")
     print('Using device: %s' % device, file=sys.stderr)
 
-    preds, icds = predict_output(args, model, test_data, device, batch_size=int(args["--batch-size"]), is_test=True)
+    preds, icds = predict_output(args, model, test_data, device, batch_size=int(args["--batch-size"]))
 
     if was_training: model.train(was_training)
 

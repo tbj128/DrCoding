@@ -1,3 +1,7 @@
+#
+# Forked from: https://github.com/lucidrains/reformer-pytorch
+#
+
 import torch
 import torch.nn as nn
 from torch.autograd.function import Function

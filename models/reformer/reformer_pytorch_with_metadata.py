@@ -1,3 +1,10 @@
+# Custom Reformer model that doesn't use shared QK attention.
+# A metadata sequence is instead used as K and QK is calculated
+# via dot product. 
+#
+# Adapted from: https://github.com/lucidrains/reformer-pytorch
+#
+
 import math
 import torch
 import torch.nn as nn

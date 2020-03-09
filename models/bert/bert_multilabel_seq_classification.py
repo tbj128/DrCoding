@@ -1,3 +1,7 @@
+# Copied from HuggingFace
+# Only used if by the classification example file
+#
+
 from transformers import BertForPreTraining, BertPreTrainedModel, BertModel, BertConfig, BertForMaskedLM, BertForSequenceClassification
 import torch.nn as nn
 
