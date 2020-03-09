@@ -184,7 +184,7 @@ def train(args: Dict):
 
     vocab = Vocab.load(args['--vocab'])
     model_type = args['--model']
-    use_cls = model_type != "baseline"
+    use_cls = False
 
     if model_type == "bert":
         tokenizer = BertTokenizer.from_pretrained(args['--base-bert-path'])
@@ -443,8 +443,9 @@ def train(args: Dict):
 def predict_icd_codes(args: Dict[str, str]):
     print("load test source sentences from [{}]".format(args['TEST_SOURCE_FILE']), file=sys.stderr)
     model_type = args["--model"]
-    use_cls = model_type != "baseline"
+    use_cls = False
 
+    vocab = Vocab.load(args['--vocab-test'])
 
     if model_type == "bert":
         tokenizer = BertTokenizer.from_pretrained(args['--base-bert-path'])
@@ -466,7 +467,6 @@ def predict_icd_codes(args: Dict[str, str]):
 
     print("load model from {}".format(args['MODEL_PATH']), file=sys.stderr)
 
-    vocab = Vocab.load(args['--vocab-test'])
     # TODO: Remove vocab from models
     if args["--model"] == "baseline":
         model = DischargeLSTM.load(args['MODEL_PATH'])

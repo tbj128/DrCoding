@@ -36,6 +36,7 @@ class TransformerClassifier(nn.Module):
         self.transformer_encoder = nn.TransformerEncoder(encoder_layers, nlayers)
         self.encoder = nn.Embedding(self.ntoken, ninp)
         self.classifier = nn.Linear(ninp, self.num_output_classes)
+        self.dropout = nn.Dropout(0.1)
         self.init_weights()
 
     def init_weights(self):
@@ -46,19 +47,21 @@ class TransformerClassifier(nn.Module):
         mask = (src == self.vocab.discharge.pad_token).to(src.device)
         src = src.permute(1, 0)
 
-        src = self.encoder(src) * math.sqrt(self.ninp)
-        src = self.pos_encoder(src)
-        output = self.transformer_encoder(src, src_key_padding_mask=mask) # (seq_len, bs, ninp)
-        output = output[0, :, :].squeeze()  # (bs, ninp) - we take the first character (the CLS token)
+        src = self.encoder(src)
+        # src = self.encoder(src) * math.sqrt(self.ninp)
+        # src = self.pos_encoder(src)
+        hidden_state = self.transformer_encoder(src, src_key_padding_mask=mask) # (seq_len, bs, ninp)
+        # output = output[0, :, :].squeeze()  # (bs, ninp) - we take the first character (the CLS token)
 
-        # pooled_output = torch.mean(hidden_state, dim=0)
-        # pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
-        # pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)
-        # pooled_output = nn.Tanh()(pooled_output)  # (bs, dim)
-        # pooled_output = self.dropout(pooled_output)  # (bs, dim)
-        # logits = self.classifier(pooled_output)  # (bs, dim)
+        hidden_state = hidden_state * ~mask.transpose(0, 1).unsqueeze(2)
+        hidden_state = torch.sum(hidden_state, dim=0) / torch.sum(mask == False, dim=1).unsqueeze(1)
 
-        return self.classifier(output)
+        pooled_output = self.pre_classifier(hidden_state)  # (bs, dim)
+        pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)
+        pooled_output = self.dropout(pooled_output)  # (bs, dim)
+        logits = self.classifier(pooled_output)  # (bs, dim)
+
+        return logits
 
     @staticmethod
     def load(model_path: str):

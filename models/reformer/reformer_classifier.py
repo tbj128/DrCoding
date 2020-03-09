@@ -57,18 +57,23 @@ class ReformerClassifier(nn.Module):
         self.reformer = Reformer(embed_size, depth, max_seq_len, heads = num_heads, bucket_size = bucket_size, n_hashes = n_hashes, ff_chunks = ff_chunks, attn_chunks = attn_chunks, causal = causal, weight_tie = weight_tie, lsh_dropout = lsh_dropout, layer_dropout = layer_dropout, random_rotations_per_head = random_rotations_per_head, twin_attention = twin_attention, use_scale_norm = use_scale_norm, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, num_mem_kv = num_mem_kv)
         self.pre_classifier = nn.Linear(embed_size, embed_size)
         self.classifier = nn.Linear(embed_size, self.num_output_classes)
-        self.dropout = nn.Dropout(0.3)
+        self.dropout = nn.Dropout(0.1)
 
     def forward(self, src, source_lengths, **kwargs):
-        mask = (src == self.vocab.discharge.pad_token).to(src.device)
-        src = self.encoder(src) * math.sqrt(self.embed_size)
-        src = self.pos_encoder(src)
+        mask = (src == self.vocab.discharge.pad_token).to(src.device) # (batch size, seq length)
+        src = self.encoder(src)
+        # src = self.encoder(src) * math.sqrt(self.embed_size)
+        # src = self.pos_encoder(src)
         hidden_state = self.reformer(src, input_mask=mask)  # (bs, seq length, dim)
-        pooled_output = hidden_state[:, 0, :].squeeze()  # (bs, dim) - we take the first character (the CLS token)
-        # pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
-        # pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)
-        # pooled_output = nn.Tanh()(pooled_output)  # (bs, dim)
-        # pooled_output = self.dropout(pooled_output)  # (bs, dim)
+        # pooled_output = hidden_state[:, 0, :].squeeze()  # (bs, dim) - we take the first character (the CLS token)
+
+        # hidden_state = torch.sum(hidden_state, dim=1) / torch.sum(mask == False, dim=1).unsqueeze(1)
+        hidden_state = hidden_state * ~mask.unsqueeze(2)
+        pooled_output = torch.sum(hidden_state, dim=1) / torch.sum(mask == False, dim=1).unsqueeze(1)
+
+        pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
+        pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)
+        pooled_output = self.dropout(pooled_output)  # (bs, dim)
         logits = self.classifier(pooled_output)  # (bs, dim)
 
         return logits
