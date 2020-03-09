@@ -60,7 +60,7 @@ class ReformerClassifier(nn.Module):
         self.dropout = nn.Dropout(0.1)
 
     def forward(self, src, source_lengths, **kwargs):
-        mask = (src == self.vocab.discharge.pad_token).type(torch.long).to(src.device) # (batch size, seq length)
+        mask = torch.tensor((src == self.vocab.discharge.pad_token), device=src.device) # (batch size, seq length)
         src = self.encoder(src)
         # src = self.encoder(src) * math.sqrt(self.embed_size)
         # src = self.pos_encoder(src)
