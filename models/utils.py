@@ -56,58 +56,42 @@ def create_embedding_from_glove(glove_path, vocab, device):
     return emb_layer, num_embeddings, embedding_dim
 
 
-def read_source_text_for_bert(file_path, tokenizer, target_length=1000):
-    examples = []
-    icds = []
-    source_lengths = []
-    data_df = pd.read_csv(file_path, header=None)
-    for (i, row) in enumerate(data_df.values):
-        hadmid = row[0]
-        line = row[1].split(" ")
-        line = " ".join(line[-target_length:]) # prefer to take the last words
-        row_icds = row[2:]
-
-        icds.append(row_icds)
-
-        sent = line.split(" ")
-        length = len(sent)
-        source_lengths.append(length)
-
-        examples.append(InputExample(guid=hadmid, text=line))
-    features = convert_examples_to_features(examples, target_length, tokenizer)
-    return features, source_lengths, icds
-
-
-def read_source_text_for_bert_with_metadata(file_path, metadata_file_path, tokenizer, target_length=1000):
+def read_source_text_for_bert_with_metadata(file_path, tokenizer, metadata_file_path=None, target_length=1000):
 
     hadmid_to_metadata = {}
-    with open(metadata_file_path, 'r') as f:
-        metadata_tsv = csv.reader(f, delimiter='\t')
-        i = 0
-        for row in metadata_tsv:
-            hadmid = int(row[0])
-            descriptions = " ".join(row[1:])
-            hadmid_to_metadata[hadmid] = descriptions
-            i += 1
+    if metadata_file_path is not None and metadata_file_path != "NONE":
+        with open(metadata_file_path, 'r') as f:
+            metadata_tsv = csv.reader(f, delimiter='\t')
+            i = 0
+            for row in metadata_tsv:
+                hadmid = int(row[0])
+                descriptions = " ".join(row[1:])
+                hadmid_to_metadata[hadmid] = descriptions
+                i += 1
 
     examples = []
     icds = []
+    icd_descriptions = []
     source_lengths = []
     data_df = pd.read_csv(file_path, header=None)
     for (i, row) in enumerate(data_df.values):
         hadmid = row[0]
-        # line = row[1]
 
         line = row[1].split(" ")
         line = " ".join(line[-target_length:]) # prefer to take the last words
 
         row_icds = row[2:]
-        row_icd_descriptions = hadmid_to_metadata[hadmid]
+
+        if metadata_file_path is not None and metadata_file_path != "NONE":
+            row_icd_descriptions = hadmid_to_metadata[hadmid]
+        else:
+            row_icd_descriptions = ""
 
         if i == 0:
             print("Input example: {} {} {} {}".format(hadmid, line[0:100], row_icds, row_icd_descriptions))
 
         icds.append(row_icds)
+        icd_descriptions.append(row_icd_descriptions)
 
         sent = line.split(" ")
         length = len(sent)
@@ -118,9 +102,10 @@ def read_source_text_for_bert_with_metadata(file_path, metadata_file_path, token
     # The max metadata length is set to be the same as the target length. Although the metadata length is
     # usually much smaller than the target length, the target needs to be passed during test time.
     features = convert_examples_to_features(examples, target_length, tokenizer, target_length)
-    return features, source_lengths, icds
 
-def read_source_text(file_path, target_length=1000, pad_token='<pad>', use_cls=False):
+    return features, source_lengths, icds, icd_descriptions
+
+def read_source_text(file_path, metadata_file_path, target_length=1000, pad_token='<pad>', use_cls=False):
     """
     Read the input discharge summaries.
     Take the first target_length number of words or pad with pad_token if the summary is less than the target_length
@@ -131,19 +116,40 @@ def read_source_text(file_path, target_length=1000, pad_token='<pad>', use_cls=F
     """
     data = []
     icds = []
+    icd_descriptions = []
     source_lengths = []
+
+    hadmid_to_metadata = {}
+    if metadata_file_path is not None and metadata_file_path != "NONE":
+        with open(metadata_file_path, 'r') as f:
+            metadata_tsv = csv.reader(f, delimiter='\t')
+            i = 0
+            for row in metadata_tsv:
+                hadmid = int(row[0])
+                descriptions = " ".join(row[1:])
+                hadmid_to_metadata[hadmid] = descriptions
+                i += 1
 
     data_df = pd.read_csv(file_path, header=None)
     for (i, row) in enumerate(data_df.values):
         hadmid = row[0]
-        # line = row[1]
 
         line = row[1].split(" ")
         line = " ".join(line[-target_length:]) # prefer to take the last words
 
         row_icds = row[2:]
+        if metadata_file_path is not None and metadata_file_path != "NONE":
+            row_icd_descriptions = hadmid_to_metadata[hadmid]
+        else:
+            row_icd_descriptions = ""
+        row_icd_descriptions = row_icd_descriptions.split(" ")
+        if len(row_icd_descriptions) > target_length:
+            row_icd_descriptions = row_icd_descriptions[:target_length]
+        while len(row_icd_descriptions) < target_length:
+            row_icd_descriptions.append(pad_token)
 
         icds.append(row_icds)
+        icd_descriptions.append(row_icd_descriptions)
 
         sent = line.split(" ")
         if use_cls:
@@ -160,7 +166,7 @@ def read_source_text(file_path, target_length=1000, pad_token='<pad>', use_cls=F
     assert len(data) == len(source_lengths)
     assert len(source_lengths) == len(icds)
 
-    return data, source_lengths, icds
+    return data, source_lengths, icds, icd_descriptions
 
 
 def batch_iter(data, batch_size, shuffle=False):
@@ -184,5 +190,6 @@ def batch_iter(data, batch_size, shuffle=False):
         src_text = [e[0] for e in examples]
         source_lengths = [e[1] for e in examples]
         icd_codes = [e[2] for e in examples]
+        icd_code_descs = [e[3] for e in examples]
 
-        yield src_text, source_lengths, icd_codes
+        yield src_text, source_lengths, icd_codes, icd_code_descs

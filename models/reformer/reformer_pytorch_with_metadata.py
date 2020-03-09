@@ -403,7 +403,7 @@ class FullQKAttention(nn.Module):
 # Shared qk attention, using either full or LSH attention
 
 class LSHSelfAttention(nn.Module):
-    def __init__(self, dim, heads = 8, bucket_size = 64, n_hashes = 8, causal = False, attn_chunks = 1, random_rotations_per_head = False, attend_across_buckets = True, allow_duplicate_attention = True, num_mem_kv = 0, one_value_head = False, use_full_attn = False, full_attn_thres = None, return_attn = False, post_attn_dropout = 0., dropout = 0., **kwargs):
+    def __init__(self, dim, heads = 8, bucket_size = 64, n_hashes = 8, max_seq_len = 128, causal = False, attn_chunks = 1, random_rotations_per_head = False, attend_across_buckets = True, allow_duplicate_attention = True, num_mem_kv = 0, one_value_head = False, use_full_attn = False, full_attn_thres = None, return_attn = False, post_attn_dropout = 0., dropout = 0., **kwargs):
         super().__init__()
         assert dim % heads == 0, 'dimensions must be divisible by number of heads'
 
@@ -414,7 +414,8 @@ class LSHSelfAttention(nn.Module):
         self.v_head_repeats = (heads if one_value_head else 1)
         v_dim = dim // self.v_head_repeats
 
-        self.toqk = nn.Linear(dim, dim, bias = False)
+        self.toq = nn.Linear(dim, dim, bias = False)
+        self.tok = nn.Linear(max_seq_len, dim, bias = False)
         self.tov = nn.Linear(dim, v_dim, bias = False)
         self.to_out = nn.Linear(dim, dim)
 
@@ -431,7 +432,7 @@ class LSHSelfAttention(nn.Module):
 
         self.callback = None
 
-    def forward(self, x, keys = None, input_mask = None, input_attn_mask = None, context_mask = None):
+    def forward(self, x, keys = None, input_mask = None, input_attn_mask = None, context_mask = None, metadata_ids = None):
         device, dtype = x.device, x.dtype
         b, t, e, h, m = *x.shape, self.heads, self.num_mem_kv
 
@@ -445,7 +446,11 @@ class LSHSelfAttention(nn.Module):
         use_full_attn = self.use_full_attn or kv_len <= self.full_attn_thres
 
         x = torch.cat((x, mem, keys), dim=1)
-        qk = self.toqk(x)
+        #### MODIFIED ####
+        q = self.toq(x) # bs, seq len, dim
+        k = self.tok(metadata_ids.transpose(-1, -2)) # bs, dim, dim
+        qk = torch.matmul(q, k) # bs, seq len, dim
+        #### END MODIFIED ####
         v = self.tov(x)
         v = v.repeat(1, 1, self.v_head_repeats)
 
@@ -576,7 +581,7 @@ class Reformer(nn.Module):
         self.twin_attention = twin_attention
         self.full_attn_thres = full_attn_thres
 
-        get_attn = lambda: LSHSelfAttention(dim, heads, bucket_size, n_hashes, causal = causal, dropout = lsh_dropout, post_attn_dropout = post_attn_dropout, attn_chunks = attn_chunks, allow_duplicate_attention = lsh_allow_duplicate_attention, attend_across_buckets = lsh_attend_across_buckets, random_rotations_per_head = random_rotations_per_head, num_mem_kv = num_mem_kv, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, one_value_head = one_value_head)
+        get_attn = lambda: LSHSelfAttention(dim, heads, bucket_size, n_hashes, max_seq_len = max_seq_len, causal = causal, dropout = lsh_dropout, post_attn_dropout = post_attn_dropout, attn_chunks = attn_chunks, allow_duplicate_attention = lsh_allow_duplicate_attention, attend_across_buckets = lsh_attend_across_buckets, random_rotations_per_head = random_rotations_per_head, num_mem_kv = num_mem_kv, use_full_attn = use_full_attn, full_attn_thres = full_attn_thres, one_value_head = one_value_head)
         get_ff = lambda: FeedForward(dim, dropout = ff_dropout)
 
         if weight_tie:

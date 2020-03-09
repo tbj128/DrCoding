@@ -38,7 +38,7 @@ Options:
     --transformer-depth=<int>               number of Transformer encoder layers to use [default: 1]
     --transformer-heads=<int>               number of Transformer heads to use [default: 8]
     --base-bert-path=<file>                 path to the pre-trained BERT model
-    --icd-desc-file=<file>                  file containing hadmid to ICD descriptions
+    --icd-desc-file=<file>                  file containing hadmid to ICD descriptions [default: NONE]
     --max-metadata-length=<int>             maximum length of the metadata text
     --verbose                               show additional logging
 """
@@ -58,7 +58,7 @@ from bert.bert_classifier import BertClassifier, BertClassifierWithMetadata
 from linear.linear import TextSentiment
 from lstm_baseline.lstm import DischargeLSTM
 from reformer.reformer_classifier import ReformerClassifier
-from utils import batch_iter, read_source_text, read_source_text_for_bert,read_source_text_for_bert_with_metadata
+from utils import batch_iter, read_source_text, read_source_text_for_bert_with_metadata
 
 import torch
 import torch.nn as nn
@@ -115,7 +115,7 @@ def predict_output(args, model, dev_data, device, batch_size=32, is_test=False):
     icds = []
     completed = 0
     with torch.no_grad():
-        for src_text, src_lengths, actual_icds in batch_iter(dev_data, batch_size):
+        for src_text, src_lengths, actual_icds, actual_icd_descs in batch_iter(dev_data, batch_size):
             if args['--model'] == "bert":
                 input_ids = torch.tensor([f.input_ids for f in src_text], dtype=torch.long, device=device)
                 input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long, device=device)
@@ -127,10 +127,14 @@ def predict_output(args, model, dev_data, device, batch_size=32, is_test=False):
                 segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long, device=device)
                 input_ids_metadata = torch.tensor([f.input_ids_metadata for f in src_text], dtype=torch.long, device=device)
                 model_out = model(input_ids, segment_ids, input_mask, metadata_input_ids=input_ids_metadata)
+            elif args['--model'] == "reformer-metadata":
+                batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
+                actual_icd_descs_tensor = model.vocab.discharge.to_input_tensor(actual_icd_descs, device)
+                batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)
+                model_out = model(batch_src_text_tensor, batch_src_lengths, metadata_ids=actual_icd_descs_tensor)
             else:
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
                 batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)
-                model_output = model(batch_src_text_tensor, batch_src_lengths)
                 model_out = model(batch_src_text_tensor, batch_src_lengths)
             output_scores = F.softmax(model_out, dim=1)  # bs x classes
 
@@ -188,36 +192,36 @@ def train(args: Dict):
 
     if model_type == "bert":
         tokenizer = BertTokenizer.from_pretrained(args['--base-bert-path'])
-        train_source_text, train_source_lengths, train_icd_codes = read_source_text_for_bert(
+        train_source_text, train_source_lengths, train_icd_codes, train_icd_descs = read_source_text_for_bert_with_metadata(
             file_path=args['--train-src'],
             target_length=int(args['--target-length']),
             tokenizer=tokenizer)
 
-        dev_source_text, dev_source_lengths, dev_icd_codes = read_source_text_for_bert(
+        dev_source_text, dev_source_lengths, dev_icd_codes, dev_icd_descs = read_source_text_for_bert_with_metadata(
             file_path=args['--dev-src'],
             target_length=int(args['--target-length']),
             tokenizer=tokenizer)
     elif model_type == "bert-metadata":
         tokenizer = BertTokenizer.from_pretrained(args['--base-bert-path'])
-        train_source_text, train_source_lengths, train_icd_codes = read_source_text_for_bert_with_metadata(
+        train_source_text, train_source_lengths, train_icd_codes, train_icd_descs = read_source_text_for_bert_with_metadata(
             file_path=args['--train-src'],
             target_length=int(args['--target-length']),
             tokenizer=tokenizer,
             metadata_file_path=args['--icd-desc-file']
         )
 
-        dev_source_text, dev_source_lengths, dev_icd_codes = read_source_text_for_bert_with_metadata(
+        dev_source_text, dev_source_lengths, dev_icd_codes, dev_icd_descs = read_source_text_for_bert_with_metadata(
             file_path=args['--dev-src'],
             target_length=int(args['--target-length']),
             tokenizer=tokenizer,
             metadata_file_path=args['--icd-desc-file']
         )
     else:
-        train_source_text, train_source_lengths, train_icd_codes = read_source_text(args['--train-src'], target_length=int(args['--target-length']), use_cls=use_cls)
-        dev_source_text, dev_source_lengths, dev_icd_codes = read_source_text(args['--dev-src'], target_length=int(args['--target-length']), use_cls=use_cls)
+        train_source_text, train_source_lengths, train_icd_codes, train_icd_descs = read_source_text(args['--train-src'], target_length=int(args['--target-length']), use_cls=use_cls, metadata_file_path=args['--icd-desc-file'])
+        dev_source_text, dev_source_lengths, dev_icd_codes, dev_icd_descs = read_source_text(args['--dev-src'], target_length=int(args['--target-length']), use_cls=use_cls, metadata_file_path=args['--icd-desc-file'])
 
-    train_data = list(zip(train_source_text, train_source_lengths, train_icd_codes))
-    dev_data = list(zip(dev_source_text, dev_source_lengths, dev_icd_codes))
+    train_data = list(zip(train_source_text, train_source_lengths, train_icd_codes, train_icd_descs))
+    dev_data = list(zip(dev_source_text, dev_source_lengths, dev_icd_codes, dev_icd_descs))
 
     train_batch_size = int(args['--batch-size'])
 
@@ -250,6 +254,23 @@ def train(args: Dict):
             weight_tie=True,
             causal=True,
             use_full_attn=False # set this to true for comparison with full attention
+        )
+    elif model_type == "reformer-metadata":
+        model = ReformerClassifier(
+            vocab=vocab,
+            embed_size=int(args['--word-embed-size']),
+            depth=int(args['--transformer-depth']),
+            max_seq_len=int(args['--target-length']),
+            num_heads=int(args['--transformer-heads']),
+            bucket_size=64,
+            n_hashes=4,
+            ff_chunks=10,
+            lsh_dropout=0.1,
+            layer_dropout=float(args['--dropout']),
+            weight_tie=True,
+            causal=True,
+            use_full_attn=False,
+            use_metadata=True
         )
     elif model_type == "transformer":
         model = TransformerClassifier(
@@ -299,14 +320,12 @@ def train(args: Dict):
     while True:
         epoch += 1
 
-        for batch_src_text, batch_src_lengths, batch_icd_codes in batch_iter(train_data, batch_size=train_batch_size, shuffle=False):
+        for batch_src_text, batch_src_lengths, batch_icd_codes, batch_icd_descs in batch_iter(train_data, batch_size=train_batch_size, shuffle=False):
             train_iter += 1
 
             optimizer.zero_grad()
 
             batch_size = len(batch_src_text)
-
-            orig_train_batch = zip(batch_src_text, batch_src_lengths, batch_icd_codes)
 
             if args['--model'] == "bert":
                 input_ids = torch.tensor([f.input_ids for f in batch_src_text], dtype=torch.long, device=device)
@@ -319,15 +338,17 @@ def train(args: Dict):
                 segment_ids = torch.tensor([f.segment_ids for f in batch_src_text], dtype=torch.long, device=device)
                 input_ids_metadata = torch.tensor([f.input_ids_metadata for f in batch_src_text], dtype=torch.long, device=device)
                 model_output = model(input_ids, segment_ids, input_mask, metadata_input_ids=input_ids_metadata)
+            elif args['--model'] == "reformer-metadata":
+                batch_src_text_tensor = model.vocab.discharge.to_input_tensor(batch_src_text, device)
+                batch_icd_descs_tensor = model.vocab.discharge.to_input_tensor(batch_icd_descs, device)
+                batch_src_lengths = torch.tensor(batch_src_lengths, dtype=torch.long, device=device)
+                model_output = model(batch_src_text_tensor, batch_src_lengths, metadata_ids=batch_icd_descs_tensor)
             else:
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(batch_src_text, device)
                 batch_src_lengths = torch.tensor(batch_src_lengths, dtype=torch.long, device=device)
                 model_output = model(batch_src_text_tensor, batch_src_lengths)
 
             batch_icd_codes = torch.tensor(batch_icd_codes, dtype=torch.float, device=device)
-            # example_losses = lossFunc(model_output, batch_icd_codes)
-            # batch_loss = example_losses.sum()
-            # loss = batch_loss / batch_size
 
             loss_fct = nn.BCEWithLogitsLoss()
             loss = loss_fct(model_output.view(-1, len(vocab.icd)), batch_icd_codes.view(-1, len(vocab.icd)))
@@ -374,11 +395,6 @@ def train(args: Dict):
 
                 train_time = time.time()
                 total_examples = total_loss = total_processed_words = 0.
-
-                # precision, recall, f1, accuracy = evaluate_model_with_dev(args, model, list(orig_train_batch), device, batch_size=batch_size, is_test=False)
-                # print("----")
-                # print('TRAIN | Precision {}, recall {}, f1 {}, accuracy: {}'.format(precision, recall, f1, accuracy), file=sys.stderr)
-                # print("----")
 
             # perform validation
             if train_iter % valid_niter == 0 or epoch == int(args['--max-epoch']):
@@ -449,21 +465,21 @@ def predict_icd_codes(args: Dict[str, str]):
 
     if model_type == "bert":
         tokenizer = BertTokenizer.from_pretrained(args['--base-bert-path'])
-        test_source_text, test_source_lengths, test_icd_codes = read_source_text_for_bert(
+        test_source_text, test_source_lengths, test_icd_codes, test_icd_descs = read_source_text_for_bert(
             file_path=args['TEST_SOURCE_FILE'],
             target_length=int(args['--target-length']),
             tokenizer=tokenizer)
     elif model_type == "bert-metadata":
         tokenizer = BertTokenizer.from_pretrained(args['--base-bert-path'])
-        test_source_text, test_source_lengths, test_icd_codes = read_source_text_for_bert_with_metadata(
+        test_source_text, test_source_lengths, test_icd_codes, test_icd_descs = read_source_text_for_bert_with_metadata(
             file_path=args['TEST_SOURCE_FILE'],
             target_length=int(args['--target-length']),
             tokenizer=tokenizer,
             metadata_file_path=args['--icd-desc-file']
         )
     else:
-        test_source_text, test_source_lengths, test_icd_codes = read_source_text(args['TEST_SOURCE_FILE'], target_length=int(args["--target-length"]), use_cls=use_cls)
-    test_data = list(zip(test_source_text, test_source_lengths, test_icd_codes))
+        test_source_text, test_source_lengths, test_icd_codes, test_icd_descs = read_source_text(args['TEST_SOURCE_FILE'], target_length=int(args["--target-length"]), use_cls=use_cls, metadata_file_path=args['--icd-desc-file'])
+    test_data = list(zip(test_source_text, test_source_lengths, test_icd_codes, test_icd_descs))
 
     print("load model from {}".format(args['MODEL_PATH']), file=sys.stderr)
 
