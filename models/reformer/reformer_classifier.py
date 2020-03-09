@@ -60,7 +60,7 @@ class ReformerClassifier(nn.Module):
         self.dropout = nn.Dropout(0.1)
 
     def forward(self, src, source_lengths, **kwargs):
-        mask = torch.tensor((src == self.vocab.discharge.pad_token), device=src.device) # (batch size, seq length)
+        mask = (src == self.vocab.discharge.pad_token) # (batch size, seq length)
         src = self.encoder(src)
         # src = self.encoder(src) * math.sqrt(self.embed_size)
         # src = self.pos_encoder(src)
@@ -68,7 +68,7 @@ class ReformerClassifier(nn.Module):
         # pooled_output = hidden_state[:, 0, :].squeeze()  # (bs, dim) - we take the first character (the CLS token)
 
         # hidden_state = torch.sum(hidden_state, dim=1) / torch.sum(mask == False, dim=1).unsqueeze(1)
-        hidden_state = hidden_state * ~mask.unsqueeze(2)
+        hidden_state = hidden_state * (~mask).type(torch.long).unsqueeze(2)
         pooled_output = torch.sum(hidden_state, dim=1) / torch.sum(mask == False, dim=1).unsqueeze(1)
 
         pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
