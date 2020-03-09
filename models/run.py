@@ -293,8 +293,8 @@ def train(args: Dict):
     hist_valid_scores = []
     train_time = begin_time = time.time()
 
-    print('Starting baseline training...')
-    logger.info('Starting baseline training...')
+    print('Starting training {}...'.format(model_type))
+    logger.info('Starting training {}...'.format(model_type))
 
     while True:
         epoch += 1

@@ -44,7 +44,7 @@ class TransformerClassifier(nn.Module):
         self.encoder.weight.data.uniform_(-initrange, initrange)
 
     def forward(self, src, batch_source_lengths, has_mask=False):
-        mask = (src == self.vocab.discharge.pad_token).to(src.device)
+        mask = (src == self.vocab.discharge.pad_token).type(torch.long).to(src.device)
         src = src.permute(1, 0)
 
         src = self.encoder(src)
