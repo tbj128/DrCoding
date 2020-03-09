@@ -53,7 +53,7 @@ class TransformerClassifier(nn.Module):
         hidden_state = self.transformer_encoder(src, src_key_padding_mask=mask) # (seq_len, bs, ninp)
         # output = output[0, :, :].squeeze()  # (bs, ninp) - we take the first character (the CLS token)
 
-        hidden_state = hidden_state * (~mask).type(torch.long).transpose(0, 1).unsqueeze(2)
+        hidden_state = hidden_state * (~mask).type(torch.float).transpose(0, 1).unsqueeze(2)
         hidden_state = torch.sum(hidden_state, dim=0) / torch.sum(mask == False, dim=1).unsqueeze(1)
 
         pooled_output = self.pre_classifier(hidden_state)  # (bs, dim)

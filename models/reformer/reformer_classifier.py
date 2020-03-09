@@ -68,7 +68,7 @@ class ReformerClassifier(nn.Module):
         # pooled_output = hidden_state[:, 0, :].squeeze()  # (bs, dim) - we take the first character (the CLS token)
 
         # hidden_state = torch.sum(hidden_state, dim=1) / torch.sum(mask == False, dim=1).unsqueeze(1)
-        hidden_state = hidden_state * (~mask).type(torch.long).unsqueeze(2)
+        hidden_state = hidden_state * (~mask).type(torch.float).unsqueeze(2)
         pooled_output = torch.sum(hidden_state, dim=1) / torch.sum(mask == False, dim=1).unsqueeze(1)
 
         pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
