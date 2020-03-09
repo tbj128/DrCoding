@@ -65,10 +65,9 @@ def convert_examples_to_features(examples, max_seq_length, tokenizer, max_metada
             tokens_metadata_text = tokenizer.tokenize(example.metadata_text)
             if len(tokens_metadata_text) > max_metadata_length:
                 tokens_metadata_text = tokens_metadata_text[:(max_metadata_length)]
-        else:
-            # Account for [CLS] and [SEP] with "- 2"
-            if len(tokens_text) > max_seq_length - 2:
-                tokens_text = tokens_text[:(max_seq_length - 2)]
+        # Account for [CLS] and [SEP] with "- 2"
+        if len(tokens_text) > max_seq_length - 2:
+            tokens_text = tokens_text[:(max_seq_length - 2)]
 
         # The convention in BERT is:
         # (b) For single sequences:
