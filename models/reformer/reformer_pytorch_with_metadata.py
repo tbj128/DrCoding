@@ -457,9 +457,9 @@ class LSHSelfAttention(nn.Module):
         q = self.toq(x) # bs, seq len, dim
         k = self.tok(metadata_ids.transpose(-1, -2)) # bs, dim, dim
         qk = torch.matmul(q, k) # bs, seq len, dim
-        # v = self.tov(x)
+        v = self.tov(x)
 
-        v = self.tov(metadata_ids)
+        # v = self.tov(metadata_ids)
         # v = self.tov(torch.randn(metadata_ids.size()))
 
         # v = torch.zeros(4, 1024, 256)
