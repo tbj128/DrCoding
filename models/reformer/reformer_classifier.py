@@ -147,6 +147,7 @@ class ReformerClassifier(nn.Module):
             embed_size=self.embed_size,
             depth=self.depth,
             max_seq_len=self.max_seq_len,
+            use_metadata=self.use_metadata,
             num_heads=self.num_heads,
             bucket_size=self.bucket_size,
             n_hashes=self.n_hashes,

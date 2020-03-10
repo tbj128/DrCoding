@@ -158,7 +158,8 @@ def predict_output(args, model, dev_data, device, batch_size=32):
                 icds.append(list(actual_icd_one_hot))
 
             completed += len(src_text)
-            print("Completed {}/{}".format(completed, len(dev_data)))
+            if completed % 100 == 0:
+                print("Completed {}/{}".format(completed, len(dev_data)))
 
     return preds, icds
 
@@ -498,6 +499,8 @@ def predict_icd_codes(args: Dict[str, str]):
     if args["--model"] == "baseline":
         model = DischargeLSTM.load(args['MODEL_PATH'])
     elif args["--model"] == "reformer":
+        model = ReformerClassifier.load(args['MODEL_PATH'])
+    elif args["--model"] == "reformer-metadata":
         model = ReformerClassifier.load(args['MODEL_PATH'])
     elif args["--model"] == "transformer":
         model = TransformerClassifier.load(args['MODEL_PATH'])
