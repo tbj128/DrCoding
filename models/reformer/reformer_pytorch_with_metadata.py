@@ -457,8 +457,13 @@ class LSHSelfAttention(nn.Module):
         q = self.toq(x) # bs, seq len, dim
         k = self.tok(metadata_ids.transpose(-1, -2)) # bs, dim, dim
         qk = torch.matmul(q, k) # bs, seq len, dim
+        # v = self.tov(x)
+
+        v = self.tov(metadata_ids)
+        # v = self.tov(torch.randn(metadata_ids.size()))
+
+        # v = torch.zeros(4, 1024, 256)
         #### END MODIFIED ####
-        v = self.tov(x)
         v = v.repeat(1, 1, self.v_head_repeats)
 
         def merge_heads(v):
@@ -493,9 +498,9 @@ class LSHSelfAttention(nn.Module):
 
         if self.callback is not None:
             self.callback(attn.reshape(b, h, t, -1), buckets.reshape(b, h, -1))
-
         out = self.to_out(out)
         return self.post_attn_dropout(out)
+
 
 # feed forward
 

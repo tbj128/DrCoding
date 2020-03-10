@@ -122,7 +122,7 @@ def read_source_text_for_bert_with_metadata(file_path, tokenizer, metadata_file_
 
     return features, source_lengths, icds, icd_descriptions
 
-def read_source_text(file_path, metadata_file_path, target_length=1000, pad_token='<pad>', use_cls=False):
+def read_source_text(file_path, metadata_file_path, target_length=1000, pad_token='<pad>', use_cls=False, use_tail=True):
     """
     Read the input discharge summaries.
     Take the last target_length number of words or pad with pad_token if the summary is less than the target_length
@@ -132,6 +132,7 @@ def read_source_text(file_path, metadata_file_path, target_length=1000, pad_toke
     @param target_length (str): the length that the sentence should be
     @param pad_token (str): the padding token
     @param use_cls (bool): true if we should add a classification token
+    @param use_tail (bool): true if we should use the words from the end of the text rather than the beginning
     """
     data = []
     icds = []
@@ -154,7 +155,11 @@ def read_source_text(file_path, metadata_file_path, target_length=1000, pad_toke
         hadmid = row[0]
 
         line = row[1].split(" ")
-        line = " ".join(line[-target_length:]) # prefer to take the last words
+        if use_tail:
+            line = " ".join(line[-target_length:]) # prefer to take the last words
+        else:
+            line = " ".join(line[:target_length]) # prefer to take the first words
+
 
         row_icds = row[2:]
         if metadata_file_path is not None and metadata_file_path != "NONE":
@@ -164,8 +169,12 @@ def read_source_text(file_path, metadata_file_path, target_length=1000, pad_toke
         row_icd_descriptions = row_icd_descriptions.split(" ")
         if len(row_icd_descriptions) > target_length:
             row_icd_descriptions = row_icd_descriptions[:target_length]
+
+        orig_description = list(row_icd_descriptions)
         while len(row_icd_descriptions) < target_length:
-            row_icd_descriptions.append(pad_token)
+            # Why don't we replicate the metadata over and over to emphasize?
+            row_icd_descriptions.extend(orig_description)
+        row_icd_descriptions = row_icd_descriptions[:target_length]
 
         icds.append(row_icds)
         icd_descriptions.append(row_icd_descriptions)
