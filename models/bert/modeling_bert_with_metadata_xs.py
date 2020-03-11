@@ -221,8 +221,8 @@ class BertSelfAttention(nn.Module):
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-            # attention_scores = attention_scores + attention_mask
-            attention_scores + attention_mask.permute(0, 1, 3, 2)
+            attention_scores = attention_scores + attention_mask
+            # attention_scores + attention_mask.permute(0, 1, 3, 2)
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
@@ -235,7 +235,7 @@ class BertSelfAttention(nn.Module):
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
-        attention_probs = attention_probs.permute(0, 1, 3, 2)
+        # attention_probs = attention_probs.permute(0, 1, 3, 2)
         context_layer = torch.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
@@ -250,13 +250,13 @@ class BertSelfOutput(nn.Module):
     def __init__(self, config):
         super(BertSelfOutput, self).__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.new_dense = nn.Linear(24, 256)
+        # self.new_dense = nn.Linear(24, 256)
         self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
-        # hidden_states = self.dense(hidden_states)
-        hidden_states = self.new_dense(hidden_states.permute(0, 2, 1)).permute(0, 2, 1)
+        hidden_states = self.dense(hidden_states)
+        # hidden_states = self.new_dense(hidden_states.permute(0, 2, 1)).permute(0, 2, 1)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states

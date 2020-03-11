@@ -133,13 +133,22 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
         self.init_weights()
 
-    def forward(self, input_ids, token_type_ids=None, attention_mask=None, metadata_input_ids=None):
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, metadata_input_ids=None, metadata_len=None):
+        # Reduce input_ids into a series of batches of sizes equal to the len of the original metadata_input_ids
+        batch_size, seq_len = input_ids.size()
+        if metadata_len == None:
+            metadata_len = seq_len
+
+        metadata_ids = metadata_input_ids[:, :metadata_len]
+        batch_increase_factor = int(seq_len / metadata_len)
+
         _, pooled_output = self.bert(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            metadata_ids=metadata_input_ids[:,:24]
-        )
+            input_ids=input_ids.view(batch_size * batch_increase_factor, metadata_len),
+            attention_mask=attention_mask.view(batch_size * batch_increase_factor, metadata_len),
+            token_type_ids=token_type_ids.view(batch_size * batch_increase_factor, metadata_len),
+            metadata_ids=torch.repeat_interleave(metadata_ids, repeats=batch_increase_factor, dim=0)
+        ) # bs * batch_increase_factor, metadata_len
+        pooled_output = pooled_output.view(batch_size, batch_increase_factor, -1).mean(dim=1)
         pooled_output = self.dropout(pooled_output)
         return self.classifier(pooled_output)
 

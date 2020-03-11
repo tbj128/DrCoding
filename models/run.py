@@ -355,7 +355,7 @@ def train(args):
                 input_mask = torch.tensor([f.input_mask for f in batch_src_text], dtype=torch.long, device=device)
                 segment_ids = torch.tensor([f.segment_ids for f in batch_src_text], dtype=torch.long, device=device)
                 input_ids_metadata = torch.tensor([f.input_ids_metadata for f in batch_src_text], dtype=torch.long, device=device)
-                model_output = model(input_ids, segment_ids, input_mask, metadata_input_ids=input_ids_metadata)
+                model_output = model(input_ids, segment_ids, input_mask, metadata_input_ids=input_ids_metadata, metadata_len=32)
             elif args['--model'] == "reformer-metadata":
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(batch_src_text, device)
                 batch_icd_descs_tensor = model.vocab.discharge.to_input_tensor(batch_icd_descs, device)
