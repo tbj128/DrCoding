@@ -27,7 +27,8 @@ Options:
     --clip-grad=<float>                     gradient clipping [default: 5.0]
     --log-every=<int>                       log every [default: 10]
     --max-epoch=<int>                       max epoch [default: 30]
-    --threshold=<int>                       threshold to predict presence of an ICD code [default: 0.3]
+    --threshold=<int>                       threshold to predict presence of an ICD code. Must specify if --top-k is not specified.
+    --top-k=<int>                           take the top k ICD codes in the prediction. Must specify if --threshold is not specified.
     --input-feed                            use input feeding
     --patience=<int>                        wait for how many iterations to decay learning rate [default: 5]
     --max-num-trial=<int>                   terminate training after how many trials [default: 5]
@@ -123,7 +124,6 @@ def predict_output(args, model, dev_data, device, batch_size=32):
     :param batch_size: the batch size to use
     :return: preds (the model-predicted ICD codes), icds (the actual ICD codes)
     """
-    thresh = float(args['--threshold'])
     preds = []
     icds = []
     completed = 0
@@ -151,8 +151,21 @@ def predict_output(args, model, dev_data, device, batch_size=32):
 
             for output_score_arr in output_scores.cpu().tolist():
                 one_hot = []
-                for score in output_score_arr:
-                    one_hot.append(1 if score >= thresh else 0)
+                if args["--threshold"]:
+                    thresh = float(args['--threshold'])
+                    for score in output_score_arr:
+                        one_hot.append(1 if score >= thresh else 0)
+                elif args["--top-k"]:
+                    top_k = int(args['--top-k'])
+                    top_indices = set((-np.array(output_score_arr)).argsort()[:top_k])
+                    i = 0
+                    for score in output_score_arr:
+                        one_hot.append(1 if i in top_indices else 0)
+                        i += 1
+                else:
+                    raise NotImplementedError("Invalid prediction type")
+
+
                 preds.append(one_hot)
             for actual_icd_one_hot in actual_icds:
                 icds.append(list(actual_icd_one_hot))

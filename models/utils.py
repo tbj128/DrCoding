@@ -95,7 +95,7 @@ def read_source_text_for_bert_with_metadata(file_path, tokenizer, metadata_file_
         hadmid = row[0]
 
         line = row[1].split(" ")
-        line = " ".join(line[-target_length:]) # prefer to take the last words
+        line = " ".join(line[:target_length])
 
         row_icds = row[2:]
 
@@ -103,6 +103,15 @@ def read_source_text_for_bert_with_metadata(file_path, tokenizer, metadata_file_
             row_icd_descriptions = hadmid_to_metadata[hadmid]
         else:
             row_icd_descriptions = ""
+        row_icd_descriptions = row_icd_descriptions.split(" ")
+        if len(row_icd_descriptions) > target_length:
+            row_icd_descriptions = row_icd_descriptions[:target_length]
+
+        orig_description = list(row_icd_descriptions)
+        while len(row_icd_descriptions) < target_length:
+            # Why don't we replicate the metadata over and over to emphasize?
+            row_icd_descriptions.extend(orig_description)
+        row_icd_descriptions = " ".join(row_icd_descriptions[:target_length])
 
         if i == 0:
             print("Input example: {} {} {} {}".format(hadmid, line[0:100], row_icds, row_icd_descriptions))

@@ -408,7 +408,6 @@ class FullQKAttention(nn.Module):
         return out, dot, torch.empty(0)
 
 # Shared qk attention, using either full or LSH attention
-
 class LSHSelfAttention(nn.Module):
     def __init__(self, dim, heads = 8, bucket_size = 64, n_hashes = 8, max_seq_len = 128, causal = False, attn_chunks = 1, random_rotations_per_head = False, attend_across_buckets = True, allow_duplicate_attention = True, num_mem_kv = 0, one_value_head = False, use_full_attn = False, full_attn_thres = None, return_attn = False, post_attn_dropout = 0., dropout = 0., **kwargs):
         super().__init__()
@@ -457,10 +456,8 @@ class LSHSelfAttention(nn.Module):
         q = self.toq(x) # bs, seq len, dim
         k = self.tok(metadata_ids.transpose(-1, -2)) # bs, dim, dim
         qk = torch.matmul(q, k) # bs, seq len, dim
-        v = self.tov(x)
 
-        # v = self.tov(metadata_ids)
-        # v = self.tov(torch.randn(metadata_ids.size()))
+        v = self.tov(x)
 
         # v = torch.zeros(4, 1024, 256)
         #### END MODIFIED ####
