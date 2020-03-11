@@ -452,15 +452,25 @@ class LSHSelfAttention(nn.Module):
         use_full_attn = self.use_full_attn or kv_len <= self.full_attn_thres
 
         x = torch.cat((x, mem, keys), dim=1)
-        #### MODIFIED ####
+        #### OPTION 1 ####
         q = self.toq(x) # bs, seq len, dim
         k = self.tok(metadata_ids.transpose(-1, -2)) # bs, dim, dim
         qk = torch.matmul(q, k) # bs, seq len, dim
-
         v = self.tov(x)
+        #### END OPTION 1 ####
 
-        # v = torch.zeros(4, 1024, 256)
-        #### END MODIFIED ####
+
+        # #### OPTION 2 ####
+        # qk = self.toq(metadata_ids) # bs, seq len, dim
+        # v = self.tov(x)
+        # #### END OPTION 2 ####
+
+
+        # #### OPTION 3 ####
+        # qk = torch.zeros(x.shape) # bs, seq len, dim
+        # v = self.tov(x)
+        # #### END OPTION 3 ####
+
         v = v.repeat(1, 1, self.v_head_repeats)
 
         def merge_heads(v):

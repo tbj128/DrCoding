@@ -58,7 +58,7 @@ from typing import List, Tuple, Dict, Set, Union
 from tqdm import tqdm
 from transformers import BertTokenizer
 
-from bert.bert_classifier import BertClassifier, BertClassifierWithMetadata
+from bert.bert_classifier import BertClassifier, BertClassifierWithMetadataXS
 from lstm_baseline.lstm import DischargeLSTM
 from reformer.reformer_classifier import ReformerClassifier
 from utils import batch_iter, read_source_text, read_source_text_for_bert_with_metadata
@@ -302,7 +302,7 @@ def train(args):
         model = BertClassifier.from_pretrained(args['--base-bert-path'], num_labels=len(vocab.icd))
         model.unfreeze_bert_encoder()
     elif model_type == "bert-metadata":
-        model = BertClassifierWithMetadata.from_pretrained(args['--base-bert-path'], num_labels=len(vocab.icd))
+        model = BertClassifierWithMetadataXS.from_pretrained(args['--base-bert-path'], num_labels=len(vocab.icd))
         model.unfreeze_bert_encoder()
     else:
         raise NotImplementedError("Invalid model type")
@@ -521,7 +521,7 @@ def predict_icd_codes(args: Dict[str, str]):
         model = BertClassifier.load(args['MODEL_PATH'], args['--base-bert-path'], num_labels=len(vocab.icd))
         model.freeze_bert_encoder()
     elif args["--model"] == "bert-metadata":
-        model = BertClassifierWithMetadata.load(args['MODEL_PATH'], args['--base-bert-path'], num_labels=len(vocab.icd))
+        model = BertClassifierWithMetadataXS.load(args['MODEL_PATH'], args['--base-bert-path'], num_labels=len(vocab.icd))
         model.freeze_bert_encoder()
     else:
         raise NotImplementedError("Not implemented")
