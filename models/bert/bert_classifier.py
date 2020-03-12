@@ -172,7 +172,7 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
         """ Load a fine-tuned model from a file.
         @param model_path (str): path to model
         """
-        state_dict = torch.load(model_path)
+        state_dict = torch.load(model_path, map_location=torch.device('cpu'))
         model = BertClassifierWithMetadata.from_pretrained(bert_pretrained_path, state_dict=state_dict, num_labels=num_labels)
         return model
 
