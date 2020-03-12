@@ -128,6 +128,8 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
     def __init__(self, config):
         super(BertClassifierWithMetadataXS, self).__init__(config)
         self.bert = BertModelWithMetadata(config)
+        self.preclassifier = nn.Linear(config.hidden_size, config.hidden_size)
+        self.relu = torch.relu()
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
         self.init_weights()
