@@ -153,9 +153,7 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
                     metadata_input_ids=metadata_tensor.repeat(batch_size, 1),
                     metadata_len=32
                 )
-                # model_out = model_out.view(batch_size, 50, -1).sum(dim=1)
-                output_scores = (model_out.view(batch_size, 50, -1).argmax(dim=1) == torch.arange(0, 50)).type(torch.long)
-
+                model_out = model_out.view(batch_size, 50, -1).sum(dim=1)
 
                 # # Original Version
                 # input_ids = torch.tensor([f.input_ids for f in src_text], dtype=torch.long, device=device)
@@ -207,6 +205,7 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
             if completed % 100 == 0:
                 print("Completed {}/{}".format(completed, len(dev_data)))
                 precision, recall, f1, accuracy = evaluate_scores(icds, preds)
+            if completed % 10 == 0:
                 print('  SO FAR: Precision {}, recall {}, f1 {}, accuracy: {}'.format(precision, recall, f1, accuracy))
 
     return preds, icds
