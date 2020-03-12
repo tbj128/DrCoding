@@ -17,7 +17,6 @@ from torch.utils.data import DataLoader, Dataset
 from transformers import BertPreTrainedModel, BertModel
 from transformer_common.positional_encoding import PositionalEncoding
 from bert.modeling_bert_with_metadata import BertModel as BertModelWithMetadata
-from bert.modeling_bert_with_metadata_xs import BertModel as BertModelWithMetadataXS
 from vocab import Vocab
 from utils import create_embedding_from_glove
 
@@ -128,7 +127,7 @@ class BertClassifierWithMetadata(BertPreTrainedModel):
 class BertClassifierWithMetadataXS(BertPreTrainedModel):
     def __init__(self, config):
         super(BertClassifierWithMetadataXS, self).__init__(config)
-        self.bert = BertModelWithMetadataXS(config)
+        self.bert = BertModelWithMetadata(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
         self.init_weights()
