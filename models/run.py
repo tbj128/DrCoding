@@ -126,7 +126,9 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
     :param batch_size: the batch size to use
     :return: preds (the model-predicted ICD codes), icds (the actual ICD codes)
     """
-    batch_size = 1
+    if args['--model'] == "bert-metadata":
+        batch_size = 1
+
     preds = []
     icds = []
     completed = 0
