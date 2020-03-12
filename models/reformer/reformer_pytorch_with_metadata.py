@@ -420,8 +420,10 @@ class LSHSelfAttention(nn.Module):
         self.v_head_repeats = (heads if one_value_head else 1)
         v_dim = dim // self.v_head_repeats
 
-        self.toq = nn.Linear(dim, dim, bias = False)
-        self.tok = nn.Linear(max_seq_len, dim, bias = False)
+        # self.toq = nn.Linear(dim, dim, bias = False)
+        # self.tok = nn.Linear(max_seq_len, dim, bias = False)
+
+        self.toqk = nn.Linear(dim, dim, bias = False)
         self.tov = nn.Linear(dim, v_dim, bias = False)
         self.to_out = nn.Linear(dim, dim)
 
@@ -452,18 +454,18 @@ class LSHSelfAttention(nn.Module):
         use_full_attn = self.use_full_attn or kv_len <= self.full_attn_thres
 
         x = torch.cat((x, mem, keys), dim=1)
-        #### OPTION 1 ####
-        q = self.toq(x) # bs, seq len, dim
-        k = self.tok(metadata_ids.transpose(-1, -2)) # bs, dim, dim
-        qk = torch.matmul(q, k) # bs, seq len, dim
-        v = self.tov(x)
-        #### END OPTION 1 ####
-
-
-        # #### OPTION 2 ####
-        # qk = self.toq(metadata_ids) # bs, seq len, dim
+        # #### OPTION 1 ####
+        # q = self.toq(x) # bs, seq len, dim
+        # k = self.tok(metadata_ids.transpose(-1, -2)) # bs, dim, dim
+        # qk = torch.matmul(q, k) # bs, seq len, dim
         # v = self.tov(x)
-        # #### END OPTION 2 ####
+        # #### END OPTION 1 ####
+
+
+        #### OPTION 2 ####
+        qk = self.toqk(x)
+        v = self.tov(x)
+        #### END OPTION 2 ####
 
 
         # #### OPTION 3 ####

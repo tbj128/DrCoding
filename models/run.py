@@ -360,7 +360,7 @@ def train(args):
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(batch_src_text, device)
                 batch_icd_descs_tensor = model.vocab.discharge.to_input_tensor(batch_icd_descs, device)
                 batch_src_lengths = torch.tensor(batch_src_lengths, dtype=torch.long, device=device)
-                model_output = model(batch_src_text_tensor, batch_src_lengths, metadata_ids=batch_icd_descs_tensor)
+                model_output = model(batch_src_text_tensor, batch_src_lengths, metadata_ids=batch_icd_descs_tensor, metadata_len=128)
             else:
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(batch_src_text, device)
                 batch_src_lengths = torch.tensor(batch_src_lengths, dtype=torch.long, device=device)

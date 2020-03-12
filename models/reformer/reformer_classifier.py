@@ -82,7 +82,7 @@ class ReformerClassifier(nn.Module):
         self.classifier = nn.Linear(embed_size, self.num_output_classes)
         self.dropout = nn.Dropout(0.1)
 
-    def forward(self, src, source_lengths, metadata_ids=None, **kwargs):
+    def forward(self, src, source_lengths, metadata_ids=None, metadata_len=None, **kwargs):
         """
         The forward pass of the Reformer classifier
         :param src: the padded input text (bs, seq len)
@@ -103,7 +103,18 @@ class ReformerClassifier(nn.Module):
 
         if self.use_metadata:
             metadata_ids = self.encoder(metadata_ids)
-            hidden_state = self.reformer(src, input_mask=mask, metadata_ids=metadata_ids)  # (bs, seq length, dim)
+            # hidden_state = self.reformer(src, input_mask=mask, metadata_ids=metadata_ids)  # (bs, seq length, dim)
+
+            if metadata_len == None:
+                metadata_len = seq_len
+            batch_size, seq_len, dim = src.size()
+            metadata_ids = metadata_ids[:, :metadata_len, :]
+            batch_increase_factor = int(seq_len / metadata_len)
+
+            hidden_state = self.reformer(src.view(batch_size * batch_increase_factor, metadata_len, dim),
+                                             input_mask=mask.view(batch_size * batch_increase_factor, metadata_len),
+                                             metadata_ids=torch.repeat_interleave(metadata_ids, repeats=batch_increase_factor, dim=0))
+            hidden_state = hidden_state.view(batch_size, seq_len, -1)
         else:
             hidden_state = self.reformer(src, input_mask=mask)  # (bs, seq length, dim)
 
