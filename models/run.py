@@ -154,6 +154,7 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
                     metadata_len=32
                 )
                 model_out = model_out.view(batch_size, 50, -1).sum(dim=1)
+                output_scores = F.softmax(model_out, dim=1)  # bs x classes
 
                 # # Original Version
                 # input_ids = torch.tensor([f.input_ids for f in src_text], dtype=torch.long, device=device)
