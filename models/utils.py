@@ -131,6 +131,36 @@ def read_source_text_for_bert_with_metadata(file_path, tokenizer, metadata_file_
 
     return features, source_lengths, icds, icd_descriptions
 
+
+def read_icd_descs_for_testing(f_icdmap, top_icds, device, metadata_len, tokenizer=None):
+    icd_to_icd_pos = {}
+    icd_pos_to_icd_desc = {}
+    final_output = []
+
+    with open(top_icds, 'r') as f:
+        metadata_tsv = csv.reader(f, delimiter='\t')
+        i = 0
+        for row in metadata_tsv:
+            icd_to_icd_pos[row[0]] = i
+            i += 1
+
+    with open(f_icdmap, "r") as f:
+        reader = csv.reader(f, delimiter=",")
+        next(reader, None) # Skip headers
+        for line in reader:
+            condensed_icd = line[1][:3]
+            if condensed_icd in icd_to_icd_pos:
+                icd_pos_to_icd_desc[icd_to_icd_pos[condensed_icd]] = line[3]
+        print(icd_pos_to_icd_desc)
+    for k in range(50):
+        tokens_metadata_text = tokenizer.tokenize(icd_pos_to_icd_desc[k])
+        metadata_ids = tokenizer.convert_tokens_to_ids(tokens_metadata_text)
+        metadata_ids = metadata_ids[:metadata_len]
+        metadata_ids += [0] * (metadata_len - len(metadata_ids))
+        final_output.append(metadata_ids)
+    return torch.tensor(final_output, device=device)
+
+
 def read_source_text(file_path, metadata_file_path, target_length=1000, pad_token='<pad>', use_cls=False, use_tail=True):
     """
     Read the input discharge summaries.

@@ -45,6 +45,8 @@ Options:
     --icd-desc-file=<file>                  file containing hadmid to ICD descriptions [default: NONE]
     --max-metadata-length=<int>             maximum length of the metadata text
     --verbose                               show additional logging
+    --d-icd-file=<file>                     file containing descriptions of the top ICD codes
+    --top-icd-file=<file>                   file containing the top 50 ICD codes
 """
 import math
 import sys
@@ -61,7 +63,7 @@ from transformers import BertTokenizer
 from bert.bert_classifier import BertClassifier, BertClassifierWithMetadataXS
 from lstm_baseline.lstm import DischargeLSTM
 from reformer.reformer_classifier import ReformerClassifier
-from utils import batch_iter, read_source_text, read_source_text_for_bert_with_metadata
+from utils import batch_iter, read_source_text, read_source_text_for_bert_with_metadata, read_icd_descs_for_testing
 
 import torch
 import torch.nn as nn
@@ -114,7 +116,7 @@ def evaluate_scores(references: List[List[str]], predicted: List[List[str]]):
     return precision / len(references), recall / len(references), f1 / len(references), accuracy / len(references)
 
 
-def predict_output(args, model, dev_data, device, batch_size=32):
+def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None):
     """
     Applies the provided model to the test data
     :param args: the input arguments
@@ -135,11 +137,24 @@ def predict_output(args, model, dev_data, device, batch_size=32):
                 segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long, device=device)
                 model_out = model(input_ids, segment_ids, input_mask)
             elif args['--model'] == "bert-metadata":
+                metadata_tensor = read_icd_descs_for_testing(args['--d-icd-file'], args['--top-icd-file'], device, 32, tokenizer=tokenizer)
+
                 input_ids = torch.tensor([f.input_ids for f in src_text], dtype=torch.long, device=device)
                 input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long, device=device)
                 segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long, device=device)
-                model_out = model(input_ids, segment_ids, input_mask, metadata_input_ids=input_ids)
+                model_out = model(
+                    input_ids.repeat_interleave(50, dim=0),
+                    segment_ids.repeat_interleave(50, dim=0),
+                    input_mask.repeat_interleave(50, dim=0),
+                    metadata_input_ids=metadata_tensor.repeat(batch_size, 1),
+                    metadata_len=32
+                )
+                model_out = model_out.view(batch_size, 50, -1).sum(dim=1)
             elif args['--model'] == "reformer-metadata":
+                # batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
+                # batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)
+                # model_out = model(batch_src_text_tensor, batch_src_lengths, metadata_ids=batch_src_text_tensor)
+
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
                 batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)
                 model_out = model(batch_src_text_tensor, batch_src_lengths, metadata_ids=batch_src_text_tensor)
@@ -177,14 +192,14 @@ def predict_output(args, model, dev_data, device, batch_size=32):
     return preds, icds
 
 
-def evaluate_model_with_dev(args, model, dev_data, device, batch_size=32):
+def evaluate_model_with_dev(args, model, dev_data, device, batch_size=32, tokenizer=None):
     """
     Evaluate the model and return the precision, recall, f1 and accuracy metrics
     """
     was_training = model.training
     model.eval()
 
-    preds, icds = predict_output(args, model, dev_data, device, batch_size=batch_size)
+    preds, icds = predict_output(args, model, dev_data, device, batch_size=batch_size, tokenizer=tokenizer)
     precision, recall, f1, accuracy = evaluate_scores(icds, preds)
 
     if was_training:
@@ -207,6 +222,7 @@ def train(args):
     # Also note that 'CLS' tokens do not work very well with the Reformer model
     use_cls = False
 
+    tokenizer = None
     if model_type == "bert":
         tokenizer = BertTokenizer.from_pretrained(args['--base-bert-path'])
         train_source_text, train_source_lengths, train_icd_codes, train_icd_descs = read_source_text_for_bert_with_metadata(
@@ -248,7 +264,6 @@ def train(args):
     model_save_path = args['--save-to']
     device = torch.device("cuda:0" if args['--cuda'] else "cpu")
 
-    tokenizer = None
     if model_type == "baseline":
         model = DischargeLSTM(vocab=vocab,
                               embed_size=int(args['--word-embed-size']),
@@ -278,7 +293,8 @@ def train(args):
             vocab=vocab,
             embed_size=int(args['--word-embed-size']),
             depth=int(args['--transformer-depth']),
-            max_seq_len=int(args['--target-length']),
+            # max_seq_len=int(args['--target-length']),
+            max_seq_len=128,
             num_heads=int(args['--transformer-heads']),
             bucket_size=64,
             n_hashes=4,
@@ -416,7 +432,7 @@ def train(args):
 
             # Perform validation at the pre-configured rate, or if we have reached the maximum number of epochs
             if train_iter % valid_niter == 0 or epoch == int(args['--max-epoch']):
-                precision, recall, f1, accuracy = evaluate_model_with_dev(args, model, dev_data, device, batch_size=int(args["--batch-size"]))   # dev batch size can be a bit larger
+                precision, recall, f1, accuracy = evaluate_model_with_dev(args, model, dev_data, device, batch_size=int(args["--batch-size"]), tokenizer=tokenizer)   # dev batch size can be a bit larger
                 valid_metric = f1
 
                 print('VALIDATION: {} | Precision {}, recall {}, f1 {}, accuracy: {}'.format(train_iter, precision, recall, f1, accuracy), file=sys.stderr)
@@ -488,9 +504,10 @@ def predict_icd_codes(args: Dict[str, str]):
 
     vocab = Vocab.load(args['--vocab-test'])
 
+    tokenizer = None
     if model_type == "bert":
         tokenizer = BertTokenizer.from_pretrained(args['--base-bert-path'])
-        test_source_text, test_source_lengths, test_icd_codes, test_icd_descs = read_source_text_for_bert(
+        test_source_text, test_source_lengths, test_icd_codes, test_icd_descs = read_source_text_for_bert_with_metadata(
             file_path=args['TEST_SOURCE_FILE'],
             target_length=int(args['--target-length']),
             tokenizer=tokenizer)
@@ -535,7 +552,7 @@ def predict_icd_codes(args: Dict[str, str]):
     device = torch.device("cuda:0" if args['--cuda'] else "cpu")
     print('Using device: %s' % device, file=sys.stderr)
 
-    preds, icds = predict_output(args, model, test_data, device, batch_size=int(args["--batch-size"]))
+    preds, icds = predict_output(args, model, test_data, device, batch_size=int(args["--batch-size"]), tokenizer=tokenizer)
 
     if was_training: model.train(was_training)
 
