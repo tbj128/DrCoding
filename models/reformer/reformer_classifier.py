@@ -105,9 +105,9 @@ class ReformerClassifier(nn.Module):
             metadata_ids = self.encoder(metadata_ids)
             # hidden_state = self.reformer(src, input_mask=mask, metadata_ids=metadata_ids)  # (bs, seq length, dim)
 
+            batch_size, seq_len, dim = src.size()
             if metadata_len == None:
                 metadata_len = seq_len
-            batch_size, seq_len, dim = src.size()
             metadata_ids = metadata_ids[:, :metadata_len, :]
             batch_increase_factor = int(seq_len / metadata_len)
 
