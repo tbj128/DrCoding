@@ -126,9 +126,6 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
     :param batch_size: the batch size to use
     :return: preds (the model-predicted ICD codes), icds (the actual ICD codes)
     """
-    if args['--model'] == "bert-metadata":
-        batch_size = 1
-
     preds = []
     icds = []
     completed = 0
@@ -139,33 +136,17 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
                 input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long, device=device)
                 segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long, device=device)
                 model_out = model(input_ids, segment_ids, input_mask)
-                output_scores = F.softmax(model_out, dim=1)  # bs x classes
             elif args['--model'] == "bert-metadata":
-                metadata_tensor = read_icd_descs_for_testing(args['--d-icd-file'], args['--top-icd-file'], device, 32, tokenizer=tokenizer)
-
+                # Original Version
                 input_ids = torch.tensor([f.input_ids for f in src_text], dtype=torch.long, device=device)
                 input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long, device=device)
                 segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long, device=device)
                 model_out = model(
-                    input_ids.repeat_interleave(50, dim=0),
-                    segment_ids.repeat_interleave(50, dim=0),
-                    input_mask.repeat_interleave(50, dim=0),
-                    metadata_input_ids=metadata_tensor.repeat(batch_size, 1),
-                    metadata_len=32
+                    input_ids,
+                    segment_ids,
+                    input_mask,
+                    metadata_input_ids=input_ids
                 )
-                model_out = model_out.view(batch_size, 50, -1).sum(dim=1)
-                output_scores = F.softmax(model_out, dim=1)  # bs x classes
-
-                # # Original Version
-                # input_ids = torch.tensor([f.input_ids for f in src_text], dtype=torch.long, device=device)
-                # input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long, device=device)
-                # segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long, device=device)
-                # model_out = model(
-                #     input_ids,
-                #     segment_ids,
-                #     input_mask,
-                #     metadata_input_ids=input_ids
-                # )
             elif args['--model'] == "reformer-metadata":
                 # batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
                 # batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)
@@ -174,12 +155,11 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
                 batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)
                 model_out = model(batch_src_text_tensor, batch_src_lengths, metadata_ids=batch_src_text_tensor)
-                output_scores = F.softmax(model_out, dim=1)  # bs x classes
             else:
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
                 batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)
                 model_out = model(batch_src_text_tensor, batch_src_lengths)
-                output_scores = F.softmax(model_out, dim=1)  # bs x classes
+            output_scores = F.softmax(model_out, dim=1)  # bs x classes
 
             for output_score_arr in output_scores.cpu().tolist():
                 one_hot = []
