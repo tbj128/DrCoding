@@ -139,6 +139,7 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
                 input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long, device=device)
                 segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long, device=device)
                 model_out = model(input_ids, segment_ids, input_mask)
+                output_scores = F.softmax(model_out, dim=1)  # bs x classes
             elif args['--model'] == "bert-metadata":
                 metadata_tensor = read_icd_descs_for_testing(args['--d-icd-file'], args['--top-icd-file'], device, 32, tokenizer=tokenizer)
 
@@ -152,7 +153,20 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
                     metadata_input_ids=metadata_tensor.repeat(batch_size, 1),
                     metadata_len=32
                 )
-                model_out = model_out.view(batch_size, 50, -1).sum(dim=1)
+                # model_out = model_out.view(batch_size, 50, -1).sum(dim=1)
+                output_scores = (model_out.view(batch_size, 50, -1).argmax(dim=1) == torch.arange(0, 50)).type(torch.long)
+
+
+                # # Original Version
+                # input_ids = torch.tensor([f.input_ids for f in src_text], dtype=torch.long, device=device)
+                # input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long, device=device)
+                # segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long, device=device)
+                # model_out = model(
+                #     input_ids,
+                #     segment_ids,
+                #     input_mask,
+                #     metadata_input_ids=input_ids
+                # )
             elif args['--model'] == "reformer-metadata":
                 # batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
                 # batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)
@@ -161,11 +175,12 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
                 batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)
                 model_out = model(batch_src_text_tensor, batch_src_lengths, metadata_ids=batch_src_text_tensor)
+                output_scores = F.softmax(model_out, dim=1)  # bs x classes
             else:
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
                 batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)
                 model_out = model(batch_src_text_tensor, batch_src_lengths)
-            output_scores = F.softmax(model_out, dim=1)  # bs x classes
+                output_scores = F.softmax(model_out, dim=1)  # bs x classes
 
             for output_score_arr in output_scores.cpu().tolist():
                 one_hot = []
@@ -191,6 +206,8 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
             completed += len(src_text)
             if completed % 100 == 0:
                 print("Completed {}/{}".format(completed, len(dev_data)))
+                precision, recall, f1, accuracy = evaluate_scores(icds, preds)
+                print('  SO FAR: Precision {}, recall {}, f1 {}, accuracy: {}'.format(precision, recall, f1, accuracy))
 
     return preds, icds
 

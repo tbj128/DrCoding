@@ -151,7 +151,6 @@ def read_icd_descs_for_testing(f_icdmap, top_icds, device, metadata_len, tokeniz
             condensed_icd = line[1][:3]
             if condensed_icd in icd_to_icd_pos:
                 icd_pos_to_icd_desc[icd_to_icd_pos[condensed_icd]] = line[3]
-        print(icd_pos_to_icd_desc)
     for k in range(50):
         tokens_metadata_text = tokenizer.tokenize(icd_pos_to_icd_desc[k])
         metadata_ids = tokenizer.convert_tokens_to_ids(tokens_metadata_text)
