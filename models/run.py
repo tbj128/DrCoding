@@ -205,8 +205,8 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
             completed += len(src_text)
             if completed % 100 == 0:
                 print("Completed {}/{}".format(completed, len(dev_data)))
-                precision, recall, f1, accuracy = evaluate_scores(icds, preds)
             if completed % 10 == 0:
+                precision, recall, f1, accuracy = evaluate_scores(icds, preds)
                 print('  SO FAR: Precision {}, recall {}, f1 {}, accuracy: {}'.format(precision, recall, f1, accuracy))
 
     return preds, icds
