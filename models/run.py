@@ -130,7 +130,7 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
     icds = []
     completed = 0
     with torch.no_grad():
-        for src_text, src_lengths, actual_icds, actual_icd_descs in batch_iter(dev_data, batch_size):
+        for src_text, src_lengths, actual_icds, actual_icd_descs in batch_iter(dev_data, 1):
             if args['--model'] == "bert":
                 input_ids = torch.tensor([f.input_ids for f in src_text], dtype=torch.long, device=device)
                 input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long, device=device)
