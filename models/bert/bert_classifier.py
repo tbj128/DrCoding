@@ -129,7 +129,6 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
         super(BertClassifierWithMetadataXS, self).__init__(config)
         self.bert = BertModelWithMetadata(config)
         self.preclassifier = nn.Linear(config.hidden_size, config.hidden_size)
-        self.relu = torch.relu()
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
         self.init_weights()
@@ -150,6 +149,8 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
             metadata_ids=torch.repeat_interleave(metadata_ids, repeats=batch_increase_factor, dim=0)
         ) # bs * batch_increase_factor, metadata_len
         pooled_output = pooled_output.view(batch_size, batch_increase_factor, -1).mean(dim=1)
+        pooled_output = self.preclassifier(pooled_output)
+        pooled_output = nn.ReLU()(pooled_output)
         pooled_output = self.dropout(pooled_output)
         return self.classifier(pooled_output)
 
