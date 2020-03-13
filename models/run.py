@@ -307,13 +307,29 @@ def train(args):
             use_metadata=True
         )
     elif model_type == "transformer":
-        model = TransformerClassifier(
+        model = ReformerClassifier(
             vocab=vocab,
-            ninp=int(args['--word-embed-size']),
-            nhid=int(args['--hidden-size']),
-            nlayers=int(args['--transformer-depth']),
-            nhead=int(args['--transformer-heads'])
+            embed_size=int(args['--word-embed-size']),
+            depth=int(args['--transformer-depth']),
+            max_seq_len=128,
+            num_heads=int(args['--transformer-heads']),
+            bucket_size=64,
+            n_hashes=4,
+            ff_chunks=10,
+            lsh_dropout=0.1,
+            layer_dropout=float(args['--dropout']),
+            weight_tie=True,
+            causal=True,
+            use_full_attn=True,
+            use_metadata=True
         )
+        # model = TransformerClassifier(
+        #     vocab=vocab,
+        #     ninp=int(args['--word-embed-size']),
+        #     nhid=int(args['--hidden-size']),
+        #     nlayers=int(args['--transformer-depth']),
+        #     nhead=int(args['--transformer-heads'])
+        # )
     elif model_type == "bert":
         model = BertClassifier.from_pretrained(args['--base-bert-path'], num_labels=len(vocab.icd))
         model.unfreeze_bert_encoder()
@@ -533,7 +549,8 @@ def predict_icd_codes(args: Dict[str, str]):
     elif args["--model"] == "reformer-metadata":
         model = ReformerClassifier.load(args['MODEL_PATH'])
     elif args["--model"] == "transformer":
-        model = TransformerClassifier.load(args['MODEL_PATH'])
+        model = ReformerClassifier.load(args['MODEL_PATH'])
+        # model = TransformerClassifier.load(args['MODEL_PATH'])
     elif args["--model"] == "bert":
         model = BertClassifier.load(args['MODEL_PATH'], args['--base-bert-path'], num_labels=len(vocab.icd))
         model.freeze_bert_encoder()
