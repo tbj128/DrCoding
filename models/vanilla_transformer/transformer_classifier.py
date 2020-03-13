@@ -66,15 +66,16 @@ class TransformerClassifier(nn.Module):
         mask = (src == self.vocab.discharge.pad_token)
 
         src = self.encoder(src)
-        src = src.permute(1, 0, 2)
 
         #
         # Uncomment below if we want to use the positional encoding
         # Empirical evidence suggests position encoding does not
         # perform as well in sequence classification problems
         #
-        # src = self.encoder(src) * math.sqrt(self.ninp)
-        # src = self.pos_encoder(src)
+        src = src * math.sqrt(self.ninp)
+        src = self.pos_encoder(src)
+
+        src = src.permute(1, 0, 2)
         hidden_state = self.transformer_encoder(src, src_key_padding_mask=mask) # (seq_len, bs, ninp)
 
         #
