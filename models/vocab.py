@@ -9,12 +9,13 @@ Adapted from the `vocab.py` file in the CS224N assignments.
 
 
 Usage:
-    vocab.py --train-src=<file> --train-icd=<file> [options] VOCAB_FILE
+    vocab.py --src=<file> --icd=<file> --icd-desc=<file> [options] VOCAB_FILE
 
 Options:
     -h --help                  Show this screen.
-    --train-src=<file>         File of training discharge summaries
-    --train-icd=<file>         File of training ICD codes
+    --src=<file>               File of training discharge summaries
+    --icd=<file>               File of training ICD codes
+    --icd-desc=<file>          File of training ICD desc
     --size=<int>               vocab size [default: 50000]
     --freq-cutoff=<int>        frequency cutoff [default: 2]
 
@@ -23,6 +24,7 @@ Options:
 from docopt import docopt
 import json
 import torch
+import csv
 from typing import List
 from utils import read_source_text
 
@@ -303,18 +305,22 @@ def main():
     """
     args = docopt(__doc__)
 
-    print('read in source sentences: %s' % args['--train-src'])
+    print('read in source sentences: %s' % args['--src'])
 
-    src_sents, src_lengths, src_icds = read_source_text(args['--train-src'])
+    data, source_lengths, _, icd_descriptions = read_source_text(args['--src'], args['--icd-desc'], target_length=3200, pad_token='<pad>', use_cls=False, use_tail=True, notes_delimiter="\t")
+
+    src_sents = data + icd_descriptions
 
     print('generating vocabulary... ')
     discharge_vocab = DischargeVocab.from_source_text(src_sents, int(args['--size']), int(args['--freq-cutoff']))
     print('generated vocabulary, source %d words' % (len(discharge_vocab)))
 
     icds = []
-    with open(args['--train-icd'], 'r') as f:
-        for row in f:
-            icds.append(row)
+    with open(args['--icd'], 'r') as f:
+        reader = csv.reader(f, delimiter='\t')
+        for row in reader:
+            icds.extend(row[1:])
+
     icd_vocab = ICDVocab.from_source(icds)
     print('ICD vocab size is %d' % (len(icd_vocab)))
 
@@ -326,6 +332,7 @@ def main():
     json.dump(full_vocab, open(args['VOCAB_FILE'], 'w'), indent=2)
 
     print('vocabulary saved to %s' % args['VOCAB_FILE'])
+
 
 if __name__ == '__main__':
     main()

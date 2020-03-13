@@ -160,7 +160,7 @@ def read_icd_descs_for_testing(f_icdmap, top_icds, device, metadata_len, tokeniz
     return torch.tensor(final_output, device=device)
 
 
-def read_source_text(file_path, metadata_file_path, target_length=1000, pad_token='<pad>', use_cls=False, use_tail=True):
+def read_source_text(file_path, metadata_file_path, target_length=1000, pad_token='<pad>', use_cls=False, use_tail=True, notes_delimiter=","):
     """
     Read the input discharge summaries.
     Take the last target_length number of words or pad with pad_token if the summary is less than the target_length
@@ -188,7 +188,7 @@ def read_source_text(file_path, metadata_file_path, target_length=1000, pad_toke
                 hadmid_to_metadata[hadmid] = descriptions
                 i += 1
 
-    data_df = pd.read_csv(file_path, header=None)
+    data_df = pd.read_csv(file_path, header=None, delimiter=notes_delimiter)
     for (i, row) in enumerate(data_df.values):
         hadmid = row[0]
 

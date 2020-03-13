@@ -46,6 +46,7 @@ class TransformerClassifier(nn.Module):
         encoder_layers = nn.TransformerEncoderLayer(ninp, nhead, nhid, dropout)
         self.transformer_encoder = nn.TransformerEncoder(encoder_layers, nlayers)
         self.encoder = nn.Embedding(self.ntoken, ninp)
+        self.pre_classifier = nn.Linear(ninp, ninp)
         self.classifier = nn.Linear(ninp, self.num_output_classes)
         self.dropout = nn.Dropout(0.1)
         self.init_weights()
@@ -90,7 +91,7 @@ class TransformerClassifier(nn.Module):
 
         pooled_output = self.pre_classifier(hidden_state)  # (bs, dim)
         pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)
-        pooled_output = self.dropout(pooled_output)  # (bs, dim)
+        pooled_output = self.dropout(hidden_state)  # (bs, dim)
         logits = self.classifier(pooled_output)  # (bs, num_output_classes)
 
         return logits
