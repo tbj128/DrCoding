@@ -64,9 +64,9 @@ class TransformerClassifier(nn.Module):
         """
 
         mask = (src == self.vocab.discharge.pad_token)
-        src = src.permute(1, 0)
 
         src = self.encoder(src)
+        src = src.permute(1, 0, 2)
 
         #
         # Uncomment below if we want to use the positional encoding
@@ -86,12 +86,14 @@ class TransformerClassifier(nn.Module):
 
         # Take the masked mean over the output hidden states. Note that the mean
         # is only calculated for positions which did not correspond to a padding token
-        hidden_state = hidden_state * (~mask).type(torch.float).transpose(0, 1).unsqueeze(2)
-        hidden_state = torch.sum(hidden_state, dim=0) / torch.sum(mask == False, dim=1).type(torch.float).unsqueeze(1)
+        
+        hidden_state = hidden_state.permute(1, 0, 2)
+        hidden_state = hidden_state * (~mask).type(torch.float).unsqueeze(2)
+        pooled_output = torch.sum(hidden_state, dim=1) / torch.sum(mask == False, dim=1).type(torch.float).unsqueeze(1)
 
-        pooled_output = self.pre_classifier(hidden_state)  # (bs, dim)
+        pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
         pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)
-        pooled_output = self.dropout(hidden_state)  # (bs, dim)
+        pooled_output = self.dropout(pooled_output)  # (bs, dim)
         logits = self.classifier(pooled_output)  # (bs, num_output_classes)
 
         return logits
