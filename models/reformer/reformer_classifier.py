@@ -98,8 +98,8 @@ class ReformerClassifier(nn.Module):
         # Empirical evidence suggests position encoding does not
         # perform as well in sequence classification problems
         #
-        # src = self.encoder(src) * math.sqrt(self.embed_size)
-        # src = self.pos_encoder(src)
+        src = src * math.sqrt(self.embed_size)
+        src = self.pos_encoder(src)
 
         if self.use_metadata:
             metadata_ids = self.encoder(metadata_ids)
