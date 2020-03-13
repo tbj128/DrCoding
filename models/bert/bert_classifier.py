@@ -146,8 +146,18 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
             attention_mask=attention_mask.view(batch_size * batch_increase_factor, metadata_len),
             token_type_ids=token_type_ids.view(batch_size * batch_increase_factor, metadata_len),
             metadata_ids=torch.repeat_interleave(metadata_ids, repeats=batch_increase_factor, dim=0)
-        ) # bs * batch_increase_factor, metadata_len
-        pooled_output = pooled_output.view(batch_size, batch_increase_factor, -1).mean(dim=1)
+        ) # bs * batch_increase_factor, dim
+
+        mask = (input_ids == 0) # (batch size, seq length)
+
+        # Don't account for completely zeroed out sub-batches
+        mask = (mask.view(batch_size, batch_increase_factor, metadata_len).sum(dim=2) == metadata_len).unsqueeze(2) # bs, batch_increase_factor
+        pooled_output = pooled_output.view(batch_size, batch_increase_factor, -1)
+        pooled_output = pooled_output * ~mask
+        # pooled_output = torch.sum(pooled_output, dim=1) / torch.sum(mask == False, dim=1).type(torch.float).unsqueeze(1)
+
+        # pooled_output = pooled_output.view(batch_size, batch_increase_factor, -1).mean(dim=1)
+        pooled_output = pooled_output.mean(dim=1)
         pooled_output = self.dropout(pooled_output)
         return self.classifier(pooled_output)
 
