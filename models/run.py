@@ -321,7 +321,7 @@ def train(args):
             weight_tie=True,
             causal=True,
             use_full_attn=True,
-            use_metadata=True
+            use_metadata=False
         )
         # model = TransformerClassifier(
         #     vocab=vocab,
