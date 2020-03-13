@@ -153,7 +153,7 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
         # Don't account for completely zeroed out sub-batches
         mask = (mask.view(batch_size, batch_increase_factor, metadata_len).sum(dim=2) == metadata_len).unsqueeze(2) # bs, batch_increase_factor
         pooled_output = pooled_output.view(batch_size, batch_increase_factor, -1)
-        pooled_output = pooled_output * ~mask
+        pooled_output = pooled_output * (~mask).type(torch.float)
         # pooled_output = torch.sum(pooled_output, dim=1) / torch.sum(mask == False, dim=1).type(torch.float).unsqueeze(1)
 
         # pooled_output = pooled_output.view(batch_size, batch_increase_factor, -1).mean(dim=1)
