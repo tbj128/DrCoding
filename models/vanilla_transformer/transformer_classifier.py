@@ -82,14 +82,14 @@ class TransformerClassifier(nn.Module):
         # Testing shows that the CLS token does not perform as well as if we had
         # took the mean over the hidden states
         #
-        # hidden_state = hidden_state[0, :, :].squeeze()  # (bs, ninp) - we take the first character (the CLS token)
+        pooled_output = hidden_state[0, :, :].squeeze()  # (bs, ninp) - we take the first character (the CLS token)
 
         # Take the masked mean over the output hidden states. Note that the mean
         # is only calculated for positions which did not correspond to a padding token
 
-        hidden_state = hidden_state.permute(1, 0, 2)
-        hidden_state = hidden_state * (~mask).type(torch.float).unsqueeze(2)
-        pooled_output = torch.sum(hidden_state, dim=1) / torch.sum(mask == False, dim=1).type(torch.float).unsqueeze(1)
+        # hidden_state = hidden_state.permute(1, 0, 2)
+        # hidden_state = hidden_state * (~mask).type(torch.float).unsqueeze(2)
+        # pooled_output = torch.sum(hidden_state, dim=1) / torch.sum(mask == False, dim=1).type(torch.float).unsqueeze(1)
 
         pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
         pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)
