@@ -151,7 +151,7 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
                     # metadata_input_ids=input_ids
 
                     metadata_input_ids=metadata_ids,
-                    meta_len=int(args['--meta-len'])
+                    metadata_len=int(args['--meta-len'])
                 )
 
             elif args['--model'] == "reformer-metadata":
