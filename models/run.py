@@ -45,8 +45,7 @@ Options:
     --icd-desc-file=<file>                  file containing hadmid to ICD descriptions [default: NONE]
     --max-metadata-length=<int>             maximum length of the metadata text
     --verbose                               show additional logging
-    --d-icd-file=<file>                     file containing descriptions of the top ICD codes
-    --top-icd-file=<file>                   file containing the top 50 ICD codes
+    --meta-len=<file>                       metadata length [default: 32]
 """
 import math
 import sys
@@ -387,7 +386,7 @@ def train(args):
                 input_mask = torch.tensor([f.input_mask for f in batch_src_text], dtype=torch.long, device=device)
                 segment_ids = torch.tensor([f.segment_ids for f in batch_src_text], dtype=torch.long, device=device)
                 input_ids_metadata = torch.tensor([f.input_ids_metadata for f in batch_src_text], dtype=torch.long, device=device)
-                model_output = model(input_ids, segment_ids, input_mask, metadata_input_ids=input_ids_metadata, metadata_len=32)
+                model_output = model(input_ids, segment_ids, input_mask, metadata_input_ids=input_ids_metadata, metadata_len=int(args['--meta-len']))
             elif args['--model'] == "reformer-metadata":
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(batch_src_text, device)
                 batch_icd_descs_tensor = model.vocab.discharge.to_input_tensor(batch_icd_descs, device)
