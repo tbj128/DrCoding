@@ -135,26 +135,53 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, metadata_input_ids=None, metadata_len=None):
         # Reduce input_ids into a series of batches of sizes equal to the len of the original metadata_input_ids
         batch_size, seq_len = input_ids.size()
+
+        input_ids = input_ids[:, 1:] # remove CLS
+
+        pad_column = torch.tensor([0] * batch_size).unsqueeze(1)
+        input_ids = torch.cat((input_ids, pad_column), dim=1)
+
         if metadata_len == None:
             metadata_len = seq_len
 
         metadata_ids = metadata_input_ids[:, :metadata_len]
         batch_increase_factor = int(seq_len / metadata_len)
 
+        cls_column = torch.tensor([101] * (batch_size * batch_increase_factor)).unsqueeze(1)
+        r_input_ids = input_ids.view(batch_size * batch_increase_factor, metadata_len)
+        r_input_ids = torch.cat((cls_column, r_input_ids), dim=1)
+        attn_mask = attention_mask.view(batch_size * batch_increase_factor, metadata_len)
+
+        zeros_column = torch.zeros((batch_size * batch_increase_factor), 1).type(torch.long)
+        ones_column = torch.ones((batch_size * batch_increase_factor), 1).type(torch.long)
+
+        r_attn_mask = torch.cat((ones_column, attn_mask), dim=1)
+
+        r_tokens = token_type_ids.view(batch_size * batch_increase_factor, metadata_len)
+        r_tokens = torch.cat((r_tokens, zeros_column), dim=1)
+
+        r_meta = torch.repeat_interleave(metadata_ids, repeats=batch_increase_factor, dim=0)
+        r_meta = torch.cat((r_meta, zeros_column), dim=1)
+
         _, pooled_output = self.bert(
-            input_ids=input_ids.view(batch_size * batch_increase_factor, metadata_len),
-            attention_mask=attention_mask.view(batch_size * batch_increase_factor, metadata_len),
-            token_type_ids=token_type_ids.view(batch_size * batch_increase_factor, metadata_len),
-            metadata_ids=torch.repeat_interleave(metadata_ids, repeats=batch_increase_factor, dim=0)
+            input_ids=r_input_ids,
+            attention_mask=r_attn_mask,
+            token_type_ids=r_tokens,
+            metadata_ids=r_meta
         ) # bs * batch_increase_factor, dim
 
-        mask = (input_ids == 0) # (batch size, seq length)
+        # mask = (r_input_ids == 0) # (batch size, seq length)
 
         # Don't account for completely zeroed out sub-batches
-        mask = (mask.view(batch_size, batch_increase_factor, metadata_len).sum(dim=2) == metadata_len).unsqueeze(2) # bs, batch_increase_factor
+        mask = (attn_mask.view(batch_size, batch_increase_factor, metadata_len).sum(dim=2) > 0).unsqueeze(2)
         pooled_output = pooled_output.view(batch_size, batch_increase_factor, -1)
-        pooled_output = pooled_output * (~mask).type(torch.float)
-        pooled_output = torch.sum(pooled_output, dim=1) / torch.sum((mask == False).type(torch.float), dim=1)
+        pooled_output = pooled_output * mask
+        pooled_output = torch.sum(pooled_output, dim=1) / torch.sum(mask.squeeze(2).type(torch.long), dim=1)
+
+        # mask = (mask.view(batch_size, batch_increase_factor, metadata_len).sum(dim=2) == metadata_len).unsqueeze(2) # bs, batch_increase_factor
+        # pooled_output = pooled_output.view(batch_size, batch_increase_factor, -1)
+        # pooled_output = pooled_output * (~mask).type(torch.float)
+        # pooled_output = torch.sum(pooled_output, dim=1) / torch.sum((mask == False).type(torch.float), dim=1)
 
         # pooled_output = pooled_output.view(batch_size, batch_increase_factor, -1).mean(dim=1)
         # pooled_output = pooled_output.mean(dim=1)
@@ -173,7 +200,7 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
         print('save model parameters to [%s]' % path, file=sys.stderr)
 
         # Only save the model and not the entire pretrained Bert
-        model_to_save = self.module if hasattr(self, 'module') else self
+        # model_to_save = self.module if hasattr(self, 'module') else self
         torch.save(model_to_save.state_dict(), path)
 
     @staticmethod
@@ -181,7 +208,7 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
         """ Load a fine-tuned model from a file.
         @param model_path (str): path to model
         """
-        state_dict = torch.load(model_path, map_location=torch.device('cpu'))
+        state_dict = torch.load(model_path)
         model = BertClassifierWithMetadataXS.from_pretrained(bert_pretrained_path, state_dict=state_dict, num_labels=num_labels)
         return model
 
