@@ -20,7 +20,6 @@
 import os
 import pandas as pd
 import logging
-import constants
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
                     level=logging.INFO)
@@ -63,7 +62,8 @@ def convert_examples_to_features(examples, max_seq_length, tokenizer, max_metada
 
         tokens_metadata_text = None
         if example.metadata_text:
-            tokens_metadata_text = tokenizer.tokenize(example.metadata_text)
+            # tokens_metadata_text = tokenizer.tokenize(example.metadata_text)
+            tokens_metadata_text = tokenizer.tokenize(example.metadata_text + " " + example.text)
             if len(tokens_metadata_text) > max_metadata_length:
                 tokens_metadata_text = tokens_metadata_text[:(max_metadata_length)]
         # Account for [CLS] and [SEP] with "- 2"
@@ -102,6 +102,7 @@ def convert_examples_to_features(examples, max_seq_length, tokenizer, max_metada
 
         input_ids_metadata_text = None
         input_mask_metadata_text = None
+
         if tokens_metadata_text:
             input_ids_metadata_text = tokenizer.convert_tokens_to_ids(tokens_metadata_text)
             input_mask_metadata_text = [1] * len(input_ids_metadata_text)

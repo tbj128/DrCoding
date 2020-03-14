@@ -136,15 +136,17 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
         # Reduce input_ids into a series of batches of sizes equal to the len of the original metadata_input_ids
         batch_size, seq_len = input_ids.size()
 
+
+        if metadata_len == None:
+            metadata_len = seq_len
+
+        # metadata_ids = metadata_input_ids[:, :metadata_len]
+
         input_ids = input_ids[:, 1:] # remove CLS
 
         pad_column = torch.tensor([0] * batch_size, device=input_ids.device).unsqueeze(1)
         input_ids = torch.cat((input_ids, pad_column), dim=1)
 
-        if metadata_len == None:
-            metadata_len = seq_len
-
-        metadata_ids = metadata_input_ids[:, :metadata_len]
         batch_increase_factor = int(seq_len / metadata_len)
 
         cls_column = torch.tensor([101] * (batch_size * batch_increase_factor), device=input_ids.device).unsqueeze(1)
@@ -160,8 +162,11 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
         r_tokens = token_type_ids.view(batch_size * batch_increase_factor, metadata_len)
         r_tokens = torch.cat((r_tokens, zeros_column), dim=1)
 
-        r_meta = torch.repeat_interleave(metadata_ids, repeats=batch_increase_factor, dim=0)
-        r_meta = torch.cat((r_meta, zeros_column), dim=1)
+        # r_meta = torch.repeat_interleave(metadata_ids, repeats=batch_increase_factor, dim=0)
+        # r_meta = torch.cat((r_meta, zeros_column), dim=1)
+
+        # Try attending on itself in smaller chunks
+        r_meta = r_input_ids
 
         _, pooled_output = self.bert(
             input_ids=r_input_ids,
