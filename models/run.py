@@ -143,7 +143,8 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
                 input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long, device=device)
                 segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long, device=device)
                 tokens_metadata_text = tokenizer.tokenize(METADATA_FIXED + " " + METADATA_FIXED)
-                metadata_ids = torch.tensor(tokenizer.convert_tokens_to_ids(tokens_metadata_text), dtype=torch.long, device=device)
+                conveted_metadata = tokenizer.convert_tokens_to_ids(tokens_metadata_text)
+                metadata_ids = torch.tensor([conveted_metadata for f in src_text], dtype=torch.long, device=device)
                 model_out = model(
                     input_ids,
                     segment_ids,
