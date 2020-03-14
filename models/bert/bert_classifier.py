@@ -138,7 +138,7 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
 
         input_ids = input_ids[:, 1:] # remove CLS
 
-        pad_column = torch.tensor([0] * batch_size).unsqueeze(1)
+        pad_column = torch.tensor([0] * batch_size, device=input_ids.device).unsqueeze(1)
         input_ids = torch.cat((input_ids, pad_column), dim=1)
 
         if metadata_len == None:
@@ -147,13 +147,13 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
         metadata_ids = metadata_input_ids[:, :metadata_len]
         batch_increase_factor = int(seq_len / metadata_len)
 
-        cls_column = torch.tensor([101] * (batch_size * batch_increase_factor)).unsqueeze(1)
+        cls_column = torch.tensor([101] * (batch_size * batch_increase_factor), device=input_ids.device).unsqueeze(1)
         r_input_ids = input_ids.view(batch_size * batch_increase_factor, metadata_len)
         r_input_ids = torch.cat((cls_column, r_input_ids), dim=1)
         attn_mask = attention_mask.view(batch_size * batch_increase_factor, metadata_len)
 
-        zeros_column = torch.zeros((batch_size * batch_increase_factor), 1).type(torch.long)
-        ones_column = torch.ones((batch_size * batch_increase_factor), 1).type(torch.long)
+        zeros_column = torch.zeros((batch_size * batch_increase_factor), 1, device=input_ids.device).type(torch.long)
+        ones_column = torch.ones((batch_size * batch_increase_factor), 1, device=input_ids.device).type(torch.long)
 
         r_attn_mask = torch.cat((ones_column, attn_mask), dim=1)
 
