@@ -175,7 +175,7 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
         pooled_output = pooled_output.view(batch_size, batch_increase_factor, -1)
         pooled_output = pooled_output * mask
         # pooled_output = torch.sum(pooled_output, dim=1) / torch.sum(mask.type(torch.float), dim=1)
-        pooled_output = torch.max(pooled_output, dim=1)
+        pooled_output = torch.max(pooled_output, dim=1)[0]
 
         pooled_output = self.dropout(pooled_output)
         return self.classifier(pooled_output)
