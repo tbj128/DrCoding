@@ -200,7 +200,7 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
         print('save model parameters to [%s]' % path, file=sys.stderr)
 
         # Only save the model and not the entire pretrained Bert
-        # model_to_save = self.module if hasattr(self, 'module') else self
+        model_to_save = self.module if hasattr(self, 'module') else self
         torch.save(model_to_save.state_dict(), path)
 
     @staticmethod
