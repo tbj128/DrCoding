@@ -15,6 +15,7 @@ import torch.nn as nn
 import torch
 # import nltk
 # nltk.download('punkt')
+import constants
 from bert.bert_utils import convert_examples_to_features, InputExample
 
 
@@ -99,19 +100,20 @@ def read_source_text_for_bert_with_metadata(file_path, tokenizer, metadata_file_
 
         row_icds = row[2:]
 
-        if metadata_file_path is not None and metadata_file_path != "NONE":
-            row_icd_descriptions = hadmid_to_metadata[hadmid]
-        else:
-            row_icd_descriptions = ""
-        row_icd_descriptions = row_icd_descriptions.split(" ")
-        if len(row_icd_descriptions) > target_length:
-            row_icd_descriptions = row_icd_descriptions[:target_length]
-
-        orig_description = list(row_icd_descriptions)
-        while len(row_icd_descriptions) < target_length:
-            # Why don't we replicate the metadata over and over to emphasize?
-            row_icd_descriptions.extend(orig_description)
-        row_icd_descriptions = " ".join(row_icd_descriptions[:target_length])
+        # if metadata_file_path is not None and metadata_file_path != "NONE":
+        #     row_icd_descriptions = hadmid_to_metadata[hadmid]
+        # else:
+        #     row_icd_descriptions = ""
+        # row_icd_descriptions = row_icd_descriptions.split(" ")
+        # if len(row_icd_descriptions) > target_length:
+        #     row_icd_descriptions = row_icd_descriptions[:target_length]
+        #
+        # orig_description = list(row_icd_descriptions)
+        # while len(row_icd_descriptions) < target_length:
+        #     # Why don't we replicate the metadata over and over to emphasize?
+        #     row_icd_descriptions.extend(orig_description)
+        # row_icd_descriptions = " ".join(row_icd_descriptions[:target_length])
+        row_icd_descriptions = constants.METADATA_FIXED
 
         if i == 0:
             print("Input example: {} {} {} {}".format(hadmid, line[0:100], row_icds, row_icd_descriptions))
@@ -200,19 +202,20 @@ def read_source_text(file_path, metadata_file_path, target_length=1000, pad_toke
 
 
         row_icds = row[2:]
-        if metadata_file_path is not None and metadata_file_path != "NONE":
-            row_icd_descriptions = hadmid_to_metadata[hadmid]
-        else:
-            row_icd_descriptions = ""
-        row_icd_descriptions = row_icd_descriptions.split(" ")
-        if len(row_icd_descriptions) > target_length:
-            row_icd_descriptions = row_icd_descriptions[:target_length]
-
-        orig_description = list(row_icd_descriptions)
-        while len(row_icd_descriptions) < target_length:
-            # Why don't we replicate the metadata over and over to emphasize?
-            row_icd_descriptions.extend(orig_description)
-        row_icd_descriptions = row_icd_descriptions[:target_length]
+        # if metadata_file_path is not None and metadata_file_path != "NONE":
+        #     row_icd_descriptions = hadmid_to_metadata[hadmid]
+        # else:
+        #     row_icd_descriptions = ""
+        # row_icd_descriptions = row_icd_descriptions.split(" ")
+        # if len(row_icd_descriptions) > target_length:
+        #     row_icd_descriptions = row_icd_descriptions[:target_length]
+        #
+        # orig_description = list(row_icd_descriptions)
+        # while len(row_icd_descriptions) < target_length:
+        #     # Why don't we replicate the metadata over and over to emphasize?
+        #     row_icd_descriptions.extend(orig_description)
+        # row_icd_descriptions = row_icd_descriptions[:target_length]
+        row_icd_descriptions = constants.METADATA_FIXED
 
         icds.append(row_icds)
         icd_descriptions.append(row_icd_descriptions)

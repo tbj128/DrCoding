@@ -75,6 +75,7 @@ from vanilla_transformer.transformer_classifier import TransformerClassifier
 from vocab import Vocab
 import logging
 import csv
+import constants
 
 ################################################################################
 # LOGGER setup
@@ -92,8 +93,6 @@ logger.addHandler(fh)
 logger.info('Starting run.py')
 
 ################################################################################
-
-METADATA_FIXED = "acute kidney failure, unspecified acute posthemorrhagic anemia other iatrogenic hypotension thrombocytopenia, unspecified hypertensive chronic kidney disease, unspecified, with chronic kidney disease stage i through stage iv, or unspecified chronic kidney disease, unspecified hyperpotassemia septic shock severe sepsis anemia, unspecified depressive disorder, not elsewhere classified pure hypercholesterolemia aortic valve disorders congestive heart failure, unspecified old myocardial infarction diabetes mellitus without mention of complication, type ii or unspecified type, not stated as uncontrolled other and unspecified hyperlipidemia unspecified essential hypertension coronary atherosclerosis of native coronary artery hypotension, unspecified esophageal reflux pneumonia, organism unspecified urinary tract infection, site not specified acidosis tobacco use disorder hyposmolality and/or hyponatremia unspecified acquired hypothyroidism pneumonitis due to inhalation of food or vomitus hypertensive chronic kidney disease, unspecified, with chronic kidney disease stage v or end stage renal disease end stage renal disease unspecified pleural effusion atrial fibrillation other specified cardiac dysrhythmias acute respiratory failure other convulsions gout, unspecified asthma, unspecified type, unspecified obstructive sleep apnea (adult)(pediatric) 0unspecified septicemia paroxysmal ventricular tachycardia chronic airway obstruction, not elsewhere classified subendocardial infarction, initial episode of care acute kidney failure with lesion of tubular necrosis cardiac complications, not elsewhere classified neonatal jaundice associated with preterm delivery other chronic pulmonary heart diseases pulmonary collapse mitral valve disorders hyperosmolality and/or hypernatremia osteoporosis, unspecified"
 
 def evaluate_scores(references: List[List[str]], predicted: List[List[str]]):
     """
@@ -142,17 +141,16 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
                 input_ids = torch.tensor([f.input_ids for f in src_text], dtype=torch.long, device=device)
                 input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long, device=device)
                 segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long, device=device)
-                tokens_metadata_text = tokenizer.tokenize(METADATA_FIXED + " " + METADATA_FIXED)
+                tokens_metadata_text = tokenizer.tokenize(constants.METADATA_FIXED) # 475 in length
                 conveted_metadata = tokenizer.convert_tokens_to_ids(tokens_metadata_text)
                 metadata_ids = torch.tensor([conveted_metadata for f in src_text], dtype=torch.long, device=device)
                 model_out = model(
                     input_ids,
                     segment_ids,
                     input_mask,
-                    metadata_input_ids=input_ids
-
-                    # metadata_input_ids=metadata_ids,
-                    # metadata_len=int(args['--meta-len'])
+                    # metadata_input_ids=input_ids
+                    metadata_input_ids=metadata_ids,
+                    metadata_len=int(args['--meta-len'])
                 )
 
             elif args['--model'] == "reformer-metadata":
@@ -395,12 +393,14 @@ def train(args):
                 input_mask = torch.tensor([f.input_mask for f in batch_src_text], dtype=torch.long, device=device)
                 segment_ids = torch.tensor([f.segment_ids for f in batch_src_text], dtype=torch.long, device=device)
                 input_ids_metadata = torch.tensor([f.input_ids_metadata for f in batch_src_text], dtype=torch.long, device=device)
-                model_output = model(input_ids, segment_ids, input_mask, metadata_input_ids=input_ids_metadata, metadata_len=int(args['--meta-len']))
+                model_output = model(input_ids, segment_ids, input_mask,
+                                     metadata_input_ids=input_ids_metadata,
+                                     metadata_len=int(args['--meta-len']))
             elif args['--model'] == "reformer-metadata":
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(batch_src_text, device)
                 batch_icd_descs_tensor = model.vocab.discharge.to_input_tensor(batch_icd_descs, device)
                 batch_src_lengths = torch.tensor(batch_src_lengths, dtype=torch.long, device=device)
-                model_output = model(batch_src_text_tensor, batch_src_lengths, metadata_ids=batch_icd_descs_tensor, metadata_len=128)
+                model_output = model(batch_src_text_tensor, batch_src_lengths, metadata_ids=batch_icd_descs_tensor, metadata_len=int(args['--meta-len']))
             else:
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(batch_src_text, device)
                 batch_src_lengths = torch.tensor(batch_src_lengths, dtype=torch.long, device=device)
