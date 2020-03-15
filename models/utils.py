@@ -161,6 +161,19 @@ def read_icd_descs_for_testing(f_icdmap, top_icds, device, metadata_len, tokeniz
     return torch.tensor(final_output, device=device)
 
 
+keywords = {'lesion', 'severe', 'disorder', 'necrosis', 'anemia', 'disease', 'tachycardia', 'food', 'chronic', 'airway',
+            'collapse', 'obstructive', 'vomitus', 'hyperlipidemia', 'pneumonitis', 'thrombocytopenia', 'mellitus',
+            'tract', 'disorders', 'ventricular', 'apnea', 'hyposmolality', 'respiratory', 'dysrhythmias', 'inhalation',
+            'atrial', 'reflux', 'sepsis', 'hyponatremia', 'delivery', 'kidney', 'tobacco', 'hypertensive',
+            'convulsions', 'pulmonary', 'hypertension', 'osteoporosis', 'asthma', 'neonatal', 'mitral', 'hypotension',
+            'heart', 'diseases', 'failure', 'valve', 'coronary', 'care', 'post', 'tubular', 'pneumonia', 'acute',
+            'septicemia', 'fibrillation', 'initial', 'urinary', 'effusion', 'diabetes', 'artery', 'preterm',
+            'iatrogenic', 'hyperosmolality', 'jaundice', 'native', 'pleural', 'essential', 'aortic', 'esophageal',
+            'organism', 'hypercholesterolemia', 'subendocardial', 'acquired', 'infarction', 'septic', 'depressive',
+            'associated', 'obstruction', 'gout', 'hypothyroidism', 'hypernatremia', 'atherosclerosis', 'hemorrhagic',
+            'shock', 'sleep', 'cardiac', 'hyperpotassemia', 'infection', 'complications', 'acidosis', 'myocardial',
+            'paroxysmal', 'congestive', 'episode'}
+
 def read_source_text(file_path, metadata_file_path, target_length=1000, pad_token='<pad>', use_cls=False, use_tail=True, notes_delimiter=","):
     """
     Read the input discharge summaries.
@@ -201,10 +214,10 @@ def read_source_text(file_path, metadata_file_path, target_length=1000, pad_toke
 
 
         row_icds = row[2:]
-        if metadata_file_path is not None and metadata_file_path != "NONE":
-            row_icd_descriptions = hadmid_to_metadata[hadmid]
-        else:
-            row_icd_descriptions = ""
+        # if metadata_file_path is not None and metadata_file_path != "NONE":
+        #     row_icd_descriptions = hadmid_to_metadata[hadmid]
+        # else:
+        #     row_icd_descriptions = ""
         # row_icd_descriptions = row_icd_descriptions.split(" ")
         # if len(row_icd_descriptions) > target_length:
         #     row_icd_descriptions = row_icd_descriptions[:target_length]
@@ -215,7 +228,7 @@ def read_source_text(file_path, metadata_file_path, target_length=1000, pad_toke
         # row_icd_descriptions = row_icd_descriptions[:target_length]
 
         icds.append(row_icds)
-        icd_descriptions.append(row_icd_descriptions)
+        # icd_descriptions.append(row_icd_descriptions)
 
         sent = line.split(" ")
         if use_cls:
@@ -228,6 +241,17 @@ def read_source_text(file_path, metadata_file_path, target_length=1000, pad_toke
             sent.append(pad_token)
         data.append(sent)
         source_lengths.append(length)
+
+        # New Approach
+        # Look for overlap between input and metadata
+        overlap = []
+        for t in sent:
+            if t in keywords:
+                overlap.append(2)
+            else:
+                overlap.append(1)
+        icd_descriptions.append(overlap)
+        # End new approach
 
     assert len(data) == len(source_lengths)
     assert len(source_lengths) == len(icds)

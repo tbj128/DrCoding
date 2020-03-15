@@ -102,19 +102,21 @@ class ReformerClassifier(nn.Module):
         src = self.pos_encoder(src)
 
         if self.use_metadata:
-            metadata_ids = self.encoder(metadata_ids)
-            # hidden_state = self.reformer(src, input_mask=mask, metadata_ids=metadata_ids)  # (bs, seq length, dim)
+            # metadata_ids = self.encoder(metadata_ids)
+            hidden_state = self.reformer(src, input_mask=mask, metadata_ids=metadata_ids)  # (bs, seq length, dim)
 
-            batch_size, seq_len, dim = src.size()
-            if metadata_len == None:
-                metadata_len = seq_len
-            metadata_ids = metadata_ids[:, :metadata_len, :]
-            batch_increase_factor = int(seq_len / metadata_len)
-
-            hidden_state = self.reformer(src.view(batch_size * batch_increase_factor, metadata_len, dim),
-                                             input_mask=mask.view(batch_size * batch_increase_factor, metadata_len),
-                                             metadata_ids=torch.repeat_interleave(metadata_ids, repeats=batch_increase_factor, dim=0))
-            hidden_state = hidden_state.view(batch_size, seq_len, -1)
+            # Version where we strip the data across mini-batches
+            #
+            # batch_size, seq_len, dim = src.size()
+            # if metadata_len == None:
+            #     metadata_len = seq_len
+            # metadata_ids = metadata_ids[:, :metadata_len, :]
+            # batch_increase_factor = int(seq_len / metadata_len)
+            #
+            # hidden_state = self.reformer(src.view(batch_size * batch_increase_factor, metadata_len, dim),
+            #                                  input_mask=mask.view(batch_size * batch_increase_factor, metadata_len),
+            #                                  metadata_ids=torch.repeat_interleave(metadata_ids, repeats=batch_increase_factor, dim=0))
+            # hidden_state = hidden_state.view(batch_size, seq_len, -1)
         else:
             hidden_state = self.reformer(src, input_mask=mask)  # (bs, seq length, dim)
 

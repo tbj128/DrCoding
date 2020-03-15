@@ -464,6 +464,7 @@ class LSHSelfAttention(nn.Module):
 
         #### OPTION 2 ####
         qk = self.toqk(x)
+        qk = qk * metadata_ids.unsqueeze(-1)
         v = self.tov(x)
         #### END OPTION 2 ####
 
