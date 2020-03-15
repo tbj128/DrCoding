@@ -247,9 +247,9 @@ def read_source_text(file_path, metadata_file_path, target_length=1000, pad_toke
         overlap = []
         for t in sent:
             if t in keywords:
-                overlap.append(5)
-            else:
                 overlap.append(1)
+            else:
+                overlap.append(0.5)
         icd_descriptions.append(overlap)
         # End new approach
 
