@@ -52,6 +52,7 @@ import sys
 import pickle
 import time
 import re
+import signal
 
 from docopt import docopt
 import numpy as np
@@ -92,6 +93,17 @@ logger.addHandler(fh)
 logger.info('Starting run.py')
 
 ################################################################################
+
+
+class ModelKill:
+  k = False
+  def __init__(self):
+    signal.signal(signal.SIGINT, self.set_to_kill)
+    signal.signal(signal.SIGTERM, self.set_to_kill)
+
+  def set_to_kill(self,signum, frame):
+    self.k = True
+
 
 def evaluate_scores(references: List[List[str]], predicted: List[List[str]]):
     """
@@ -368,6 +380,8 @@ def train(args):
     print('Starting training {}...'.format(model_type))
     logger.info('Starting training {}...'.format(model_type))
 
+    kill_watch = ModelKill()
+
     while True:
         epoch += 1
 
@@ -407,6 +421,12 @@ def train(args):
             loss = loss_fct(model_output.view(-1, len(vocab.icd)), batch_icd_codes.view(-1, len(vocab.icd)))
             batch_loss = loss
             print("Loss is {}".format(loss))
+
+            if kill_watch.k:
+                # User requested kill
+                print("User requested kill. Saving model...")
+                model.save(model_save_path + ".kill")
+                sys.exit()
 
             if args['--verbose']:
                 print("  > epoch {} iter {} loss {}".format(epoch, train_iter, loss.item()))
