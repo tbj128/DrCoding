@@ -62,8 +62,8 @@ def convert_examples_to_features(examples, max_seq_length, tokenizer, max_metada
 
         tokens_metadata_text = None
         if example.metadata_text:
-            # tokens_metadata_text = tokenizer.tokenize(example.metadata_text)
-            tokens_metadata_text = tokenizer.tokenize(example.metadata_text + " " + example.text)
+            tokens_metadata_text = tokenizer.tokenize(example.metadata_text)
+            # tokens_metadata_text = tokenizer.tokenize(example.metadata_text + " " + example.text)
             if len(tokens_metadata_text) > max_metadata_length:
                 tokens_metadata_text = tokens_metadata_text[:(max_metadata_length)]
         # Account for [CLS] and [SEP] with "- 2"

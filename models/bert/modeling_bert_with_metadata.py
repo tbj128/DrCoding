@@ -640,7 +640,7 @@ class BertModel(BertPreTrainedModel):
 
         embedding_output = self.embeddings(input_ids, position_ids=position_ids, token_type_ids=token_type_ids)
         if metadata_token_type_ids is not None:
-            metadata_embedding_output = self.embeddings(metadata_token_type_ids, position_ids=None, token_type_ids=metadata_token_type_ids)
+            metadata_embedding_output = self.embeddings(metadata_ids, position_ids=None, token_type_ids=metadata_token_type_ids)
             encoder_outputs = self.encoder(embedding_output,
                                            extended_attention_mask,
                                            head_mask=head_mask,
