@@ -507,6 +507,9 @@ def train(args):
 
                         # reset patience
                         patience = 0
+                else:
+                    print("Saving latest model...")
+                    model.save(model_save_path + ".latest")
 
             if epoch == int(args['--max-epoch']):
                 print('reached maximum number of epochs!', file=sys.stderr)
