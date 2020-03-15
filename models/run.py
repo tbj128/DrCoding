@@ -137,18 +137,30 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
                 segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long, device=device)
                 model_out = model(input_ids, segment_ids, input_mask)
             elif args['--model'] == "bert-metadata":
+                # # Original Version
+                # input_ids = torch.tensor([f.input_ids for f in src_text], dtype=torch.long, device=device)
+                # input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long, device=device)
+                # segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long, device=device)
+                # model_out = model(
+                #     input_ids,
+                #     segment_ids,
+                #     input_mask,
+                #     metadata_input_ids=input_ids,
+                #     metadata_len=int(args['--meta-len'])
+                # )
+
                 # Original Version
                 input_ids = torch.tensor([f.input_ids for f in src_text], dtype=torch.long, device=device)
                 input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long, device=device)
                 segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long, device=device)
+                metadata_ids = torch.tensor([f.input_ids_metadata for f in src_text], dtype=torch.long, device=device)
                 model_out = model(
                     input_ids,
                     segment_ids,
                     input_mask,
-                    metadata_input_ids=input_ids,
+                    metadata_input_ids=metadata_ids,
                     metadata_len=int(args['--meta-len'])
                 )
-
             elif args['--model'] == "reformer-metadata":
                 # batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
                 # batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)
