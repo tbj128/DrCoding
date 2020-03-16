@@ -128,6 +128,7 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
     def __init__(self, config):
         super(BertClassifierWithMetadataXS, self).__init__(config)
         self.bert = BertModelWithMetadata(config)
+        self.pre_classifier = nn.Linear(config.hidden_size + 92, config.hidden_size) # there are 92 keywords
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
         self.init_weights()
@@ -137,39 +138,41 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
         batch_size, seq_len = input_ids.size()
 
 
-        if metadata_len == None:
-            metadata_len = seq_len
-
-        input_ids = input_ids[:, 1:] # remove CLS
-
-        pad_column = torch.tensor([0] * batch_size, device=input_ids.device).unsqueeze(1)
-        input_ids = torch.cat((input_ids, pad_column), dim=1)
-
-        batch_increase_factor = int(seq_len / metadata_len)
-
-        cls_column = torch.tensor([101] * (batch_size * batch_increase_factor), device=input_ids.device).unsqueeze(1)
-        r_input_ids = input_ids.view(batch_size * batch_increase_factor, metadata_len)
-        r_input_ids = torch.cat((cls_column, r_input_ids), dim=1)
-        attn_mask = attention_mask.view(batch_size * batch_increase_factor, metadata_len)
-
-        zeros_column = torch.zeros((batch_size * batch_increase_factor), 1, device=input_ids.device).type(torch.long)
-        ones_column = torch.ones((batch_size * batch_increase_factor), 1, device=input_ids.device).type(torch.long)
-
-        r_attn_mask = torch.cat((ones_column, attn_mask), dim=1)
-
-        r_tokens = token_type_ids.view(batch_size * batch_increase_factor, metadata_len)
-        r_tokens = torch.cat((r_tokens, zeros_column), dim=1)
+        # if metadata_len == None:
+        #     metadata_len = seq_len
+        #
+        # input_ids = input_ids[:, 1:] # remove CLS
+        #
+        # pad_column = torch.tensor([0] * batch_size, device=input_ids.device).unsqueeze(1)
+        # input_ids = torch.cat((input_ids, pad_column), dim=1)
+        #
+        # batch_increase_factor = int(seq_len / metadata_len)
+        #
+        # cls_column = torch.tensor([101] * (batch_size * batch_increase_factor), device=input_ids.device).unsqueeze(1)
+        # r_input_ids = input_ids.view(batch_size * batch_increase_factor, metadata_len)
+        # r_input_ids = torch.cat((cls_column, r_input_ids), dim=1)
+        # attn_mask = attention_mask.view(batch_size * batch_increase_factor, metadata_len)
+        #
+        # zeros_column = torch.zeros((batch_size * batch_increase_factor), 1, device=input_ids.device).type(torch.long)
+        # ones_column = torch.ones((batch_size * batch_increase_factor), 1, device=input_ids.device).type(torch.long)
+        #
+        # r_attn_mask = torch.cat((ones_column, attn_mask), dim=1)
+        #
+        # r_tokens = token_type_ids.view(batch_size * batch_increase_factor, metadata_len)
+        # r_tokens = torch.cat((r_tokens, zeros_column), dim=1)
 
         # Original method
         #
-        metadata_ids = metadata_input_ids[:, :metadata_len]
-        r_meta = torch.repeat_interleave(metadata_ids, repeats=batch_increase_factor, dim=0)
-        r_meta = torch.cat((r_meta, zeros_column), dim=1)
+        # metadata_ids = metadata_input_ids[:, :metadata_len]
+        # r_meta = torch.repeat_interleave(metadata_ids, repeats=batch_increase_factor, dim=0)
+        # r_meta = torch.cat((r_meta, zeros_column), dim=1)
 
+        #
         # Try attending on itself in smaller chunks
         #
         # r_meta = r_input_ids
 
+        #
         # Try adding a little bit of the metadata IDs with full chunk attention
         #
         # metadata_ids = metadata_input_ids[:, 1:] # remove CLS
@@ -178,23 +181,31 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
         # cls_column = torch.tensor([101] * (batch_size * batch_increase_factor), device=metadata_ids.device).unsqueeze(1)
         # r_meta = metadata_ids.view(batch_size * batch_increase_factor, metadata_len)
         # r_meta = torch.cat((cls_column, r_meta), dim=1)
+        #
 
-        # print(r_attn_mask)
+        # _, pooled_output = self.bert(
+        #     input_ids=r_input_ids,
+        #     attention_mask=r_attn_mask,
+        #     token_type_ids=r_tokens,
+        #     metadata_ids=r_input_ids
+        # ) # bs * batch_increase_factor, dim
+
+        # # Don't account for completely zeroed out sub-batches
+        # mask = (attn_mask.view(batch_size, batch_increase_factor, metadata_len).sum(dim=2) > 0).type(torch.float).unsqueeze(2)
+        # pooled_output = pooled_output.view(batch_size, batch_increase_factor, -1)
+        # pooled_output = pooled_output * mask
+        # pooled_output = torch.sum(pooled_output, dim=1) / torch.sum(mask.type(torch.float), dim=1)
+
+
         _, pooled_output = self.bert(
-            input_ids=r_input_ids,
-            attention_mask=r_attn_mask,
-            token_type_ids=r_tokens,
-            metadata_ids=r_meta
-        ) # bs * batch_increase_factor, dim
+            input_ids=input_ids,
+            token_type_ids=token_type_ids,
+            attention_mask=attention_mask
+        )
+        metadata_ids = torch.tensor(metadata_input_ids, device=hidden_state.device)
+        pooled_output = torch.cat((pooled_output, metadata_ids), dim=1) # bs, dim + num keywords
 
-        # Don't account for completely zeroed out sub-batches
-        mask = (attn_mask.view(batch_size, batch_increase_factor, metadata_len).sum(dim=2) > 0).type(torch.float).unsqueeze(2)
-        pooled_output = pooled_output.view(batch_size, batch_increase_factor, -1)
-        pooled_output = pooled_output * mask
-        pooled_output = torch.sum(pooled_output, dim=1) / torch.sum(mask.type(torch.float), dim=1)
-        # pooled_output = torch.max(pooled_output, dim=1)[0]
-        # print(pooled_output)
-
+        self.pre_classifier(pooled_output)
         pooled_output = self.dropout(pooled_output)
         return self.classifier(pooled_output)
 

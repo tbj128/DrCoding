@@ -145,7 +145,7 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
                     input_ids,
                     segment_ids,
                     input_mask,
-                    metadata_input_ids=input_ids,
+                    metadata_input_ids=actual_icd_descs,
                     metadata_len=int(args['--meta-len'])
                 )
             elif args['--model'] == "reformer-metadata":
@@ -391,7 +391,7 @@ def train(args):
                 segment_ids = torch.tensor([f.segment_ids for f in batch_src_text], dtype=torch.long, device=device)
                 input_ids_metadata = torch.tensor([f.input_ids_metadata for f in batch_src_text], dtype=torch.long, device=device)
                 model_output = model(input_ids, segment_ids, input_mask,
-                                     metadata_input_ids=input_ids_metadata,
+                                     metadata_input_ids=batch_icd_descs,
                                      metadata_len=int(args['--meta-len']))
             elif args['--model'] == "reformer-metadata":
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(batch_src_text, device)
