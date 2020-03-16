@@ -393,7 +393,8 @@ def train(args):
                                      metadata_len=int(args['--meta-len']))
             elif args['--model'] == "reformer-metadata":
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(batch_src_text, device)
-                batch_icd_descs_tensor = model.vocab.discharge.to_input_tensor(batch_icd_descs, device)
+                # batch_icd_descs_tensor = model.vocab.discharge.to_input_tensor(batch_icd_descs, device)
+                batch_icd_descs_tensor = batch_icd_descs
                 batch_src_lengths = torch.tensor(batch_src_lengths, dtype=torch.long, device=device)
                 model_output = model(batch_src_text_tensor, batch_src_lengths, metadata_ids=batch_icd_descs_tensor, metadata_len=int(args['--meta-len']))
             else:

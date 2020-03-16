@@ -70,6 +70,8 @@ class ReformerClassifier(nn.Module):
                                      use_scale_norm=use_scale_norm, use_full_attn=use_full_attn,
                                      full_attn_thres=full_attn_thres, num_mem_kv=num_mem_kv)
 
+            self.pre_classifier = nn.Linear(embed_size, embed_size)
+
         else:
             self.reformer = ReformerWithMetadata(embed_size, depth, max_seq_len, heads=num_heads, bucket_size=bucket_size,
                                      n_hashes=n_hashes, ff_chunks=ff_chunks, attn_chunks=attn_chunks, causal=causal,
@@ -78,7 +80,7 @@ class ReformerClassifier(nn.Module):
                                      use_scale_norm=use_scale_norm, use_full_attn=use_full_attn,
                                      full_attn_thres=full_attn_thres, num_mem_kv=num_mem_kv)
 
-        self.pre_classifier = nn.Linear(embed_size, embed_size)
+            self.pre_classifier = nn.Linear(embed_size + 92, embed_size) # 92 keywords
         self.classifier = nn.Linear(embed_size, self.num_output_classes)
         self.dropout = nn.Dropout(0.1)
 
@@ -129,6 +131,11 @@ class ReformerClassifier(nn.Module):
 
         hidden_state = hidden_state * (~mask).type(torch.float).unsqueeze(2)
         pooled_output = torch.sum(hidden_state, dim=1) / torch.sum(mask == False, dim=1).type(torch.float).unsqueeze(1)
+
+        if self.use_metadata:
+            # Join with metadata
+            metadata_ids = torch.tensor(metadata_ids, device=hidden_state.device)
+            pooled_output = torch.cat((pooled_output, metadata_ids), dim=1) # bs, dim + num keywords
 
         pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
         pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)

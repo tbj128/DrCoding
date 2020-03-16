@@ -161,7 +161,7 @@ def read_icd_descs_for_testing(f_icdmap, top_icds, device, metadata_len, tokeniz
     return torch.tensor(final_output, device=device)
 
 
-keywords = {'lesion', 'severe', 'disorder', 'necrosis', 'anemia', 'disease', 'tachycardia', 'food', 'chronic', 'airway',
+keywords = ['lesion', 'severe', 'disorder', 'necrosis', 'anemia', 'disease', 'tachycardia', 'food', 'chronic', 'airway',
             'collapse', 'obstructive', 'vomitus', 'hyperlipidemia', 'pneumonitis', 'thrombocytopenia', 'mellitus',
             'tract', 'disorders', 'ventricular', 'apnea', 'hyposmolality', 'respiratory', 'dysrhythmias', 'inhalation',
             'atrial', 'reflux', 'sepsis', 'hyponatremia', 'delivery', 'kidney', 'tobacco', 'hypertensive',
@@ -172,7 +172,7 @@ keywords = {'lesion', 'severe', 'disorder', 'necrosis', 'anemia', 'disease', 'ta
             'organism', 'hypercholesterolemia', 'subendocardial', 'acquired', 'infarction', 'septic', 'depressive',
             'associated', 'obstruction', 'gout', 'hypothyroidism', 'hypernatremia', 'atherosclerosis', 'hemorrhagic',
             'shock', 'sleep', 'cardiac', 'hyperpotassemia', 'infection', 'complications', 'acidosis', 'myocardial',
-            'paroxysmal', 'congestive', 'episode'}
+            'paroxysmal', 'congestive', 'episode']
 
 def read_source_text(file_path, metadata_file_path, target_length=1000, pad_token='<pad>', use_cls=False, use_tail=True, notes_delimiter=","):
     """
@@ -230,6 +230,17 @@ def read_source_text(file_path, metadata_file_path, target_length=1000, pad_toke
         icds.append(row_icds)
         # icd_descriptions.append(row_icd_descriptions)
 
+        # New Approach
+        # Look for overlap between input and metadata
+        # overlap = []
+        # for t in sent:
+        #     if t in keywords:
+        #         overlap.append(1)
+        #     else:
+        #         overlap.append(0.5)
+        # icd_descriptions.append(overlap)
+        # End new approach
+
         sent = line.split(" ")
         if use_cls:
             sent = ['<cls>'] + sent
@@ -243,14 +254,16 @@ def read_source_text(file_path, metadata_file_path, target_length=1000, pad_toke
         source_lengths.append(length)
 
         # New Approach
-        # Look for overlap between input and metadata
-        overlap = []
-        for t in sent:
-            if t in keywords:
-                overlap.append(1)
+        overlap_words = []
+        s = set(sent)
+        for t in keywords:
+            if t in s:
+                # overlap_words.append(t)
+                overlap_words.append(1.)
             else:
-                overlap.append(0.5)
-        icd_descriptions.append(overlap)
+                # overlap_words.append(pad_token)
+                overlap_words.append(0.)
+        icd_descriptions.append(overlap_words)
         # End new approach
 
     assert len(data) == len(source_lengths)
