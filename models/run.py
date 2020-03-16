@@ -155,7 +155,9 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
 
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
                 batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)
-                model_out = model(batch_src_text_tensor, batch_src_lengths, metadata_ids=batch_src_text_tensor)
+
+                model_out = model(batch_src_text_tensor, batch_src_lengths, metadata_ids=actual_icd_descs)
+                # model_out = model(batch_src_text_tensor, batch_src_lengths, metadata_ids=batch_src_text_tensor)
             else:
                 batch_src_text_tensor = model.vocab.discharge.to_input_tensor(src_text, device)
                 batch_src_lengths = torch.tensor(src_lengths, dtype=torch.long, device=device)
