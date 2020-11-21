@@ -1,0 +1,17 @@
+{
+  "icd": {
+    "negative": 1,
+    "positive": 0
+  },
+  "discharge": {
+    "apple": 6,
+    "<cls>": 2,
+    "monkey": 5,
+    "right": 7,
+    "left": 3,
+    "<unk>": 1,
+    "pear": 4,
+    "femur": 8,
+    "<pad>": 0
+  }
+}

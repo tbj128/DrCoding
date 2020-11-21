@@ -95,14 +95,28 @@ def read_source_text_for_bert_with_metadata(file_path, tokenizer, metadata_file_
         hadmid = row[0]
 
         line = row[1].split(" ")
+
+        # New Approach
+        overlap_words = []
+        s = set(line)
+        for t in keywords:
+            if t in s:
+                # overlap_words.append(t)
+                overlap_words.append(1.)
+            else:
+                # overlap_words.append(pad_token)
+                overlap_words.append(0.)
+        icd_descriptions.append(overlap_words)
+        # End new approach
+
         line = " ".join(line[:target_length])
 
         row_icds = row[2:]
 
-        if metadata_file_path is not None and metadata_file_path != "NONE":
-            row_icd_descriptions = hadmid_to_metadata[hadmid]
-        else:
-            row_icd_descriptions = ""
+        # if metadata_file_path is not None and metadata_file_path != "NONE":
+        #     row_icd_descriptions = hadmid_to_metadata[hadmid]
+        # else:
+        #     row_icd_descriptions = ""
 
         # row_icd_descriptions = row_icd_descriptions.split(" ")
         # if len(row_icd_descriptions) > target_length:
@@ -114,17 +128,21 @@ def read_source_text_for_bert_with_metadata(file_path, tokenizer, metadata_file_
         #     row_icd_descriptions.extend(orig_description)
         # row_icd_descriptions = " ".join(row_icd_descriptions[:target_length])
 
-        if i == 0:
-            print("Input example: {} {} {} {}".format(hadmid, line[0:100], row_icds, row_icd_descriptions))
+        # if i == 0:
+        #     print("Input example: {} {} {} {}".format(hadmid, line[0:100], row_icds, row_icd_descriptions))
 
         icds.append(row_icds)
-        icd_descriptions.append(row_icd_descriptions)
+
+
+
+        # icd_descriptions.append(row_icd_descriptions)
 
         sent = line.split(" ")
         length = len(sent)
         source_lengths.append(length)
 
-        examples.append(InputExample(guid=hadmid, text=line, metadata_text=row_icd_descriptions))
+        # examples.append(InputExample(guid=hadmid, text=line, metadata_text=row_icd_descriptions))
+        examples.append(InputExample(guid=hadmid, text=line))
 
     # The max metadata length is set to be the same as the target length. Although the metadata length is
     # usually much smaller than the target length, the target needs to be passed during test time.

@@ -202,7 +202,6 @@ class BertClassifierWithMetadataXS(BertPreTrainedModel):
             token_type_ids=token_type_ids,
             attention_mask=attention_mask
         )
-        metadata_ids = torch.tensor(metadata_input_ids, device=pooled_output.device)
         pooled_output = torch.cat((pooled_output, metadata_ids), dim=1) # bs, dim + num keywords
 
         self.pre_classifier(pooled_output)

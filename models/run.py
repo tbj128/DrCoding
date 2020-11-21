@@ -141,6 +141,7 @@ def predict_output(args, model, dev_data, device, batch_size=32, tokenizer=None)
                 input_ids = torch.tensor([f.input_ids for f in src_text], dtype=torch.long, device=device)
                 input_mask = torch.tensor([f.input_mask for f in src_text], dtype=torch.long, device=device)
                 segment_ids = torch.tensor([f.segment_ids for f in src_text], dtype=torch.long, device=device)
+                actual_icd_descs = torch.tensor([f for f in actual_icd_descs], dtype=torch.long, device=device)
                 model_out = model(
                     input_ids,
                     segment_ids,
@@ -389,7 +390,8 @@ def train(args):
                 input_ids = torch.tensor([f.input_ids for f in batch_src_text], dtype=torch.long, device=device)
                 input_mask = torch.tensor([f.input_mask for f in batch_src_text], dtype=torch.long, device=device)
                 segment_ids = torch.tensor([f.segment_ids for f in batch_src_text], dtype=torch.long, device=device)
-                input_ids_metadata = torch.tensor([f.input_ids_metadata for f in batch_src_text], dtype=torch.long, device=device)
+                # input_ids_metadata = torch.tensor([f.input_ids_metadata for f in batch_src_text], dtype=torch.long, device=device)
+                input_ids_metadata = torch.tensor([f for f in batch_icd_descs], dtype=torch.long, device=device)
                 model_output = model(input_ids, segment_ids, input_mask,
                                      metadata_input_ids=batch_icd_descs,
                                      metadata_len=int(args['--meta-len']))
